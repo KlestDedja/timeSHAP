@@ -34,10 +34,11 @@ if __name__ == '__main__':
     root_folder = os.getcwd()
 
     # Consider the full dataset, or a subset of it for faster runs (e.g. first 700 rows)
-    X = pd.read_csv(os.path.join(root_folder, 'FLChain-single-event-imputed', 'data.csv'))[:700]
+    X_full = pd.read_csv(os.path.join(root_folder, 'FLChain-single-event-imputed', 'data.csv'))
+    X = pd.read_csv(os.path.join(root_folder, 'FLChain-single-event-imputed', 'data.csv'))#[:700]
     # X['flc_ratio'] = X['kappa']/X['lambda']
     X.rename(columns={"sample_yr": "sample_year"})
-    y = pd.read_csv(os.path.join(root_folder, 'FLChain-single-event-imputed', 'targets.csv')).to_records(index=False)[:700]
+    y = pd.read_csv(os.path.join(root_folder, 'FLChain-single-event-imputed', 'targets.csv')).to_records(index=False)#[:700]
     y = auto_rename_fields(y)
 
 
@@ -50,9 +51,12 @@ if __name__ == '__main__':
     general_figs_folder = os.path.join(root_folder, 'figures')
     interval_figs_folder = os.path.join(root_folder, 'figures', 'interval-plots')
 
-    if len(X) <= 700: # save results from data subsets into drafts folder
-        general_figs_folder = os.path.join(root_folder, 'figures', 'drafts')
-        interval_figs_folder = os.path.join(root_folder, 'figures', 'interval-plots', 'drafts')
+    # choose whether to store in `draft-figures` folder (in .gitignore) or in the
+    # normal `figures` folder (possibly also to be added to .gitignore at some point)
+    fig_folder = 'draft-figures' if len(X_full) > len(X) else 'figures'
+
+    general_figs_folder = os.path.join(root_folder, fig_folder)
+    interval_figs_folder = os.path.join(root_folder, fig_folder, 'interval-plots')
 
     clf = RandomSurvivalForest(n_estimators=100, min_samples_split=10,
                                 n_jobs=5, random_state=0)
@@ -74,7 +78,7 @@ if __name__ == '__main__':
     y_pred_surv = clf.predict_survival_function(X_test, return_array=True)
     y_pred_surv = pd.DataFrame(y_pred_surv, columns=unique_times)
 
-    IDX_PLOT = 1 #idx = 36 for size = 700. idx =1 for full data
+    IDX_PLOT = 1 #meaningful example is idx = 36 for data with size = 70, and idx =1 for the full data
     FONTSIZE = 14
 
 
@@ -101,7 +105,7 @@ if __name__ == '__main__':
     plt.xlim(0, 5020)
     plt.ylabel("$S(t)$", fontsize=FONTSIZE)
     plt.ylim(0, 1.05)
-    plt.savefig(os.path.join(root_folder, 'example-figures', 'survival-curve-example.pdf'))
+    plt.savefig(os.path.join(root_folder, fig_folder, 'survival-curve-example.pdf'))
     plt.show()
 
 
@@ -112,7 +116,7 @@ if __name__ == '__main__':
     plt.xlabel("time $t$", fontsize=FONTSIZE)
     plt.xlim(0, 5020)
     plt.ylabel("$\Lambda(t)$", fontsize=FONTSIZE)
-    plt.savefig(os.path.join(root_folder, 'example-figures', 'cum-hazard-curve-example.pdf'))
+    plt.savefig(os.path.join(root_folder, fig_folder, 'cum-hazard-curve-example.pdf'))
     plt.show()
 
 
@@ -123,7 +127,7 @@ if __name__ == '__main__':
     plt.xlabel("time $t$", fontsize=FONTSIZE)
     plt.xlim(0, 5020)
     plt.ylabel("$100 \ \lambda(t)$", fontsize=FONTSIZE)
-    plt.savefig(os.path.join(root_folder, 'example-figures', 'hazard-curve-example.pdf'))
+    plt.savefig(os.path.join(root_folder, fig_folder, 'hazard-curve-example.pdf'))
     plt.show()
 
 
@@ -206,8 +210,11 @@ if __name__ == '__main__':
     with open(filename, 'wb') as file:
         pickle.dump(data_to_save, file)
 
+    ### If running on a notebook, you can re-open the stored data and model
+    # directly from this point onward
 
-        #%% now iterate over single samples to be explained (for each interval)
+     #%% now iterate over single samples to be explained (for each interval)
+
 
     load_size = len(X)
 
@@ -220,6 +227,8 @@ if __name__ == '__main__':
         y_pred_surv = data['y_pred_surv']
         DPI_RES = data['dpi']
 
+
+    # examples to explain: 12 for full data, or 3 for fast, draft runs
     N = 12 if load_size > 700 else 3
 
     for i in range(N):
@@ -386,7 +395,7 @@ if __name__ == '__main__':
         surv_image.close()
 
 
-        '''add title image on top of the current collage'''
+        # add title image on top of the current collage
 
         title_text = "Time-SHAP explanation" # for sample instance i={i}
         font_size = round(28*(DPI_RES/72))  # Adjust title size. Scale is relative to dpi=72
