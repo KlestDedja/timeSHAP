@@ -10,7 +10,7 @@ conda install shap (0.47.2) (used to be 0.42.1)
 conda install matplotlib (3.10.0)
 conda install ipython (8.30.0)
 
-the above packages normally lead to the
+the above packages normally leads to the
 installation of the following base packages as well:
 - bottleneck-1.3.7
 - numpy-1.26.3
