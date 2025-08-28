@@ -172,6 +172,7 @@ if __name__ == '__main__':
     time_intervals = [0, 3.5, 7, 10.5, 14] #in years (this gives nice plots, but very long)
     time_intervals = [0, 5, 10, 14] #in years
 
+    time_intervals = [0, 0.005, 10, 14] #in years
     for i, t_i in enumerate(range(len(time_intervals)-1)):
 
         T_start = time_intervals[t_i]
