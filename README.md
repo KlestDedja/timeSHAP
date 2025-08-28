@@ -74,8 +74,5 @@ pip install "scikit-survival>=0.22" "shap==0.47" "matplotlib==3.10.0" "ipython==
 - Example datasets are provided in `FLChain-single-event-imputed/`.
 
 ## Notes
-- The code is tested with the package versions listed above. Other versions may work but are not guaranteed.
+- The code is tested with the package versions listed above. Other package and Python versions should work but are not guaranteed.
 - For questions or issues, please open an issue on GitHub.
-
-## License
-MIT License
