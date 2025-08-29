@@ -182,9 +182,9 @@ if __name__ == "__main__":
     """
     # split timeline in intervals and explain each segment
     # time_intervals = [0, 1720, 3440, 5160] #in days
-    time_intervals = [0, 1250, 2500, 3800, 5100]  # years
+    time_intervals = [0, 1250, 2500, 4000, 5200]  # years
     # nice plots, but a bit too many. Shorter version:
-    time_intervals = [0, 1800, 3600, 5100]
+    time_intervals = [0, 1800, 3600, 5200]
 
     for i, t_i in enumerate(range(len(time_intervals) - 1)):
 
@@ -376,7 +376,7 @@ if __name__ == "__main__":
             plt.sca(ax)  # make this Axes current for SHAP
             ax = shap.plots.waterfall(shap_values_use, max_display=10, show=False)
             ax.set_title(
-                f"Output explanation, interval [{key}]   ",
+                f"Output explanation, interval [{key})   ",
                 fontsize=round(8 * (DPI_RES / 72)),
             )
 
@@ -389,12 +389,12 @@ if __name__ == "__main__":
             # plt.show()
             plt.close(fig)  # Close the figure to free up memory
 
-            print(f"TIME INTERVAl: {key}")
+            print(f"TIME INTERVAL: {key}")
             print(
-                f"Local prediction auto: {shap_values_use.base_values + shap_values_use.values.sum():.4f}"
+                f"Sample prediction auto: {shap_values_use.base_values + shap_values_use.values.sum():.4f}"
             )
-            print(f"Population pred autom.: {shap_values_use.base_values:.4f}")
-            print(f"Population pred manual: {1-y_pred_pop.iloc[index_T_end]:.4f}")
+            print(f"Population prediction (autom.): {shap_values_use.base_values:.4f}")
+            print(f"Population prediction (manual): {1-y_pred_pop.iloc[index_T_end]:.4f}")
 
             # interval loop closed, now let's load images and paste them one next to each other
 
@@ -493,8 +493,11 @@ if __name__ == "__main__":
             text_width, text_height = draw.textsize(
                 TITLE_SHAP_PLOT, font=font
             )  # older Pillow
+
+        v_padding = 20  # otherwise bottom part of the title can be cut
+
         title_image = Image.new(
-            "RGB", (combo_width, text_height + 10), color=(255, 255, 255)
+            "RGB", (combo_width, text_height + v_padding), color=(255, 255, 255)
         )  # Added padding
         # Initialize drawing context
         draw = ImageDraw.Draw(title_image)
@@ -511,7 +514,7 @@ if __name__ == "__main__":
             color=(255, 255, 255),
         )
         # Paste the combo image below the title first
-        final_image.paste(combo_image, (0, title_image.height - 10))
+        final_image.paste(combo_image, (0, title_image.height - v_padding))
         # Now paste the title above it
         final_image.paste(title_image, (0, 0))
         final_image.save(
