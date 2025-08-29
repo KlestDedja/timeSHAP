@@ -48,10 +48,10 @@ if __name__ == "__main__":
         X = X[:500]
         y = y[:500]
 
-    if np.max(y["time"]) > 100:
-        y_time_years = y["time"]  # .astype(np.float64)
-        y_time_years = y_time_years / 365
-        y["time"] = y_time_years
+    # if np.max(y["time"]) > 200:
+    #     y_time_years = y["time"]  # .astype(np.float64)
+    #     y_time_years = y_time_years / 365
+    #     y["time"] = y_time_years
 
     # Default location for storing result figures and plots
     general_figs_folder = os.path.join(root_folder, "figures")
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     # choose whether to store in `draft-figures` folder (in .gitignore)
     # or in the normal `figures` folder
     fig_folder = (
-        "draft-figures" if len(X) > 500 else "figures"
+        "draft-figures" if DRAFT_RUN else "figures"
     )  # pylint: disable=invalid-name
 
     general_figs_folder = os.path.join(root_folder, fig_folder)
@@ -104,7 +104,7 @@ if __name__ == "__main__":
     plt.figure()
     plt.title("Survival function $S(t)$", fontsize=FONTSIZE + 2)
     # plt.plot(unique_times, y_surv)
-    plt.plot(unique_times * 365, y_surv_smooth, lw=2)
+    plt.plot(unique_times, y_surv_smooth, lw=2)
     plt.xlabel("time $t$", fontsize=FONTSIZE)
     plt.xlim(0, 5020)
     plt.ylabel("$S(t)$", fontsize=FONTSIZE)
@@ -115,7 +115,7 @@ if __name__ == "__main__":
     plt.figure()
     plt.title(r"Cum. Hazard function $\Lambda(t)$", fontsize=FONTSIZE + 2)
     # plt.plot(unique_times, y_hazard)
-    plt.plot(unique_times * 365, y_hazard_smooth, lw=2)
+    plt.plot(unique_times, y_hazard_smooth, lw=2)
     plt.xlabel("time $t$", fontsize=FONTSIZE)
     plt.xlim(0, 5020)
     plt.ylabel(r"$\Lambda(t)$", fontsize=FONTSIZE)
@@ -125,7 +125,7 @@ if __name__ == "__main__":
     plt.figure()
     plt.title(r"Hazard function $\lambda(t)$", fontsize=FONTSIZE + 2)
     # plt.plot(unique_times, dy_hazard)
-    plt.plot(unique_times * 365, 100 * dy_hazard_smooth, lw=2)
+    plt.plot(unique_times, 100 * dy_hazard_smooth, lw=2)
     plt.axhline(
         0, color="gray", linestyle="--", linewidth=1, zorder=0
     )  # thin line at y=0
@@ -163,14 +163,14 @@ if __name__ == "__main__":
     shap_values = explainer(X_test, check_additivity=True)
     shap_values = format_SHAP_values(shap_values, clf, X_test)
 
-    global_plt_name = "Global_SHAP.pdf"
+    GLOBAL_PLT_NAME = "Global_SHAP.pdf"
 
     plt.figure()
     plt.title("Global explanation", size=16)
     shap.summary_plot(shap_values, max_display=10, alpha=0.7, show=False)
     plt.xlabel("SHAP value: impact on output", size=14)
     plt.savefig(
-        os.path.join(general_figs_folder, global_plt_name),
+        os.path.join(general_figs_folder, GLOBAL_PLT_NAME),
         bbox_inches="tight",
         dpi=DPI_RES,
     )
@@ -182,16 +182,10 @@ if __name__ == "__main__":
     """
     # split timeline in intervals and explain each segment
     # time_intervals = [0, 1720, 3440, 5160] #in days
-    time_intervals = [
-        0,
-        3.5,
-        7,
-        10.5,
-        14,
-    ]  # in years (this gives nice plots, but very long)
-    time_intervals = [0, 5, 10, 14]  # in years
+    time_intervals = [0, 1250, 2500, 3800, 5100]  # years
+    # nice plots, but a bit too many. Shorter version:
+    time_intervals = [0, 1800, 3600, 5100]
 
-    # time_intervals = [0, 5, 10, 14] #in years
     for i, t_i in enumerate(range(len(time_intervals) - 1)):
 
         T_start = time_intervals[t_i]
@@ -520,7 +514,6 @@ if __name__ == "__main__":
         final_image.paste(combo_image, (0, title_image.height - 10))
         # Now paste the title above it
         final_image.paste(title_image, (0, 0))
-
         final_image.save(
             os.path.join(general_figs_folder, "combo-plots", combo_local_plt_name_pdf),
             dpi=(DPI_RES, DPI_RES),
@@ -531,6 +524,11 @@ if __name__ == "__main__":
         )  # overwrite combo_image
 
         display(final_image)
+
+        print(
+            "Combined plot stored in:",
+            os.path.join(general_figs_folder, "combo-plots", combo_local_plt_name_pdf),
+        )
 
         # display(combo_image)
 

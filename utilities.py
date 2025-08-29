@@ -158,10 +158,21 @@ def rolling_kernel(curve, kernel_size=10, kernel=None):
 
 
 class SurvivalModelConverter:
+    """
+    Given the semi-closed interval of time [T_start, T_end)
+    This class converts scikit-survival's base learners of a
+    RandomSurvivalForest in a dict format that has binary outcomes
+    and is therefore compatible with SHAP's library (tested until shap==0.47)
+    Importantly, we consider the semi-closed interval where the start time is included
+    and the end time is not included to avoid counting twice some events in an
+    iteration over contiguous time intervals.
+    Advanced users might want to remember that the Survival function S(t)
+    is **right** continuous.
+    """
 
     def __init__(self, clf_obj, T_start=0, T_end=None, baseline_Pt=0):
         self.clf_obj = clf_obj
-        self.T_start = T_start
+        self.T_start = T_start  # Start time (extreme included)
         self.T_end = T_end
         self.baseline_Pt = baseline_Pt
 
@@ -286,16 +297,17 @@ class SurvivalModelConverter:
             )
 
         # Compute indices for self.T_start and self.T_end in `unique_times_`
-        # identifies the last element of (sorted array) unique_times_ such that
-        # element_start <= T_start and element_end < T_end. Remember argmax returns the FIRST maximum arg
-        # TODO busy right here:
+        # Remembering that argmax returns the FIRST maximum arg fo an array, we
+        # identifies the largest element of (sorted array) unique_times_ such that
+        # element <= T_start (the last `False` element)
         index_start = np.argmax(tree_obj.unique_times_ > self.T_start) - 1
+        # and the largest element s.t. element < T_end (again, the last False clause)
         index_end = np.argmax(tree_obj.unique_times_ >= self.T_end) - 1
         # This leaves out some edge cases, treated here below:
         # if self.T_start is smaller than all `unique_times_`
         if tree_obj.unique_times_[0] > self.T_start:
             index_start = 0
-        # if self.T_end is greater than all `unique_times_`: not allowed!
+        # if self.T_end is smaller than all `unique_times_`: not allowed!
         if tree_obj.unique_times_[0] > self.T_end:
             raise ValueError(
                 f"T_end={self.T_end:.4f} is too small. Must be greater than {min(tree_obj.unique_times_):.4f}"
