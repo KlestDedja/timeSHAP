@@ -34,9 +34,7 @@ if __name__ == "__main__":
 
     root_folder = os.getcwd()
 
-    X = pd.read_csv(
-        os.path.join(root_folder, "FLChain-single-event-imputed", "data.csv")
-    )
+    X = pd.read_csv(os.path.join(root_folder, "FLChain-single-event-imputed", "data.csv"))
     # X['flc_ratio'] = X['kappa']/X['lambda']
     X.rename(columns={"sample_yr": "sample_year"})
     y = pd.read_csv(
@@ -44,14 +42,19 @@ if __name__ == "__main__":
     ).to_records(index=False)
     y = auto_rename_fields(y)
 
+    # with open("surv_outcome.pkl", "rb") as f:
+    #     y_np = pickle.load(f)
+
+    # print(y_np.dtype)
+    # y = np.rec.array(y_np, dtype=[('event', '?'), ('time', '<f8')])
+    # print(y)
+
+    # X = np.random.rand(len(y), 3)  # Example input data
+    # print(X.shape)
+
     if DRAFT_RUN:  # faster run with less samples (almost instant)
         X = X[:500]
         y = y[:500]
-
-    # if np.max(y["time"]) > 200:
-    #     y_time_years = y["time"]  # .astype(np.float64)
-    #     y_time_years = y_time_years / 365
-    #     y["time"] = y_time_years
 
     # Default location for storing result figures and plots
     general_figs_folder = os.path.join(root_folder, "figures")
@@ -59,20 +62,14 @@ if __name__ == "__main__":
 
     # choose whether to store in `draft-figures` folder (in .gitignore)
     # or in the normal `figures` folder
-    fig_folder = (
-        "draft-figures" if DRAFT_RUN else "figures"
-    )  # pylint: disable=invalid-name
+    fig_folder = "draft-figures" if DRAFT_RUN else "figures"  # pylint: disable=invalid-name
 
     general_figs_folder = os.path.join(root_folder, fig_folder)
     interval_figs_folder = os.path.join(root_folder, fig_folder, "interval-plots")
 
-    clf = RandomSurvivalForest(
-        n_estimators=100, min_samples_split=10, n_jobs=5, random_state=0
-    )
+    clf = RandomSurvivalForest(n_estimators=100, min_samples_split=10, n_jobs=5, random_state=0)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=1
-    )
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1)
     clf.fit(X_train, y_train)
     y_pred = clf.predict(X_test)
 
@@ -86,7 +83,9 @@ if __name__ == "__main__":
     y_pred_surv = clf.predict_survival_function(X_test, return_array=True)
     y_pred_surv = pd.DataFrame(y_pred_surv, columns=unique_times)
 
-    IDX_PLOT = 1  # meaningful example is idx = 36 for data with size = 700, and idx =1 for the full data
+    IDX_PLOT = (
+        1  # meaningful example is idx = 36 for data with size = 700, and idx =1 for the full data
+    )
     FONTSIZE = 14
 
     y_survs = clf.predict_survival_function(X_test, return_array=True)
@@ -97,16 +96,16 @@ if __name__ == "__main__":
 
     from utilities import rolling_kernel
 
-    y_surv_smooth = rolling_kernel(y_surv, kernel_size=20)
-    y_hazard_smooth = rolling_kernel(y_hazard, kernel_size=20)
-    dy_hazard_smooth = rolling_kernel(dy_hazard, kernel_size=50)
+    y_surv_smooth = rolling_kernel(y_surv, kernel_size=2)  # before was = 20, not important
+    y_hazard_smooth = rolling_kernel(y_hazard, kernel_size=2)
+    dy_hazard_smooth = rolling_kernel(dy_hazard, kernel_size=2)
 
     plt.figure()
     plt.title("Survival function $S(t)$", fontsize=FONTSIZE + 2)
     # plt.plot(unique_times, y_surv)
     plt.plot(unique_times, y_surv_smooth, lw=2)
     plt.xlabel("time $t$", fontsize=FONTSIZE)
-    plt.xlim(0, 5020)
+    plt.xlim(0, max(unique_times) * 1.02)
     plt.ylabel("$S(t)$", fontsize=FONTSIZE)
     plt.ylim(0, 1.05)
     plt.savefig(os.path.join(root_folder, fig_folder, "survival-curve-example.pdf"))
@@ -117,7 +116,7 @@ if __name__ == "__main__":
     # plt.plot(unique_times, y_hazard)
     plt.plot(unique_times, y_hazard_smooth, lw=2)
     plt.xlabel("time $t$", fontsize=FONTSIZE)
-    plt.xlim(0, 5020)
+    plt.xlim(0, max(unique_times) * 1.02)
     plt.ylabel(r"$\Lambda(t)$", fontsize=FONTSIZE)
     plt.savefig(os.path.join(root_folder, fig_folder, "cum-hazard-curve-example.pdf"))
     plt.show()
@@ -126,11 +125,9 @@ if __name__ == "__main__":
     plt.title(r"Hazard function $\lambda(t)$", fontsize=FONTSIZE + 2)
     # plt.plot(unique_times, dy_hazard)
     plt.plot(unique_times, 100 * dy_hazard_smooth, lw=2)
-    plt.axhline(
-        0, color="gray", linestyle="--", linewidth=1, zorder=0
-    )  # thin line at y=0
+    plt.axhline(0, color="gray", linestyle="--", linewidth=1, zorder=0)  # thin line at y=0
     plt.xlabel("time $t$", fontsize=FONTSIZE)
-    plt.xlim(0, 5020)
+    plt.xlim(0, max(unique_times) * 1.02)
     plt.ylabel(r"$100\:\lambda(t)$", fontsize=FONTSIZE)
     plt.savefig(os.path.join(root_folder, fig_folder, "hazard-curve-example.pdf"))
     plt.show()
@@ -140,9 +137,7 @@ if __name__ == "__main__":
     unique_times = clf.unique_times_
     interval_shap_values = {}
 
-    convert_all = SurvivalModelConverter(
-        clf_obj=clf, T_start=0, T_end=max(unique_times) + 1
-    )
+    convert_all = SurvivalModelConverter(clf_obj=clf, t_start=0, t_end=max(unique_times) * 1.02)
 
     clf_dict = []
     tree_dicts = [
@@ -184,18 +179,18 @@ if __name__ == "__main__":
     # time_intervals = [0, 1720, 3440, 5160] #in days
     time_intervals = [0, 1250, 2500, 4000, 5200]  # years
     # nice plots, but a bit too many. Shorter version:
-    time_intervals = [0, 1800, 3600, 5200]
+    time_intervals = [0, 1800, 3600, 5100]
+
+    # time_intervals = [0, 2, 4, 6]
 
     for i, t_i in enumerate(range(len(time_intervals) - 1)):
 
-        T_start = time_intervals[t_i]
-        T_end = time_intervals[t_i + 1]
+        t_start = time_intervals[t_i]
+        t_end = time_intervals[t_i + 1]
 
-        print(f"Computing SHAP values for interval: [{T_start}, {T_end}) ...")
+        print(f"Computing SHAP values for interval: ({t_start}, {t_end}] ...")
 
-        convert_interv = SurvivalModelConverter(
-            clf_obj=clf, T_start=T_start, T_end=T_end
-        )
+        convert_interv = SurvivalModelConverter(clf_obj=clf, t_start=t_start, t_end=t_end)
 
         clf_interv = []
         tree_intervs = [
@@ -215,41 +210,41 @@ if __name__ == "__main__":
 
         shap_values_int = explainer(X_test, check_additivity=True)
         shap_values_int = format_SHAP_values(shap_values_int, clf, X_test)
-        interval_shap_values[f"{str(T_start)}-{str(T_end)}"] = shap_values_int
+        interval_shap_values[f"{str(t_start)}-{str(t_end)}"] = shap_values_int
 
-    ## dump trained model dictionary, predictions, and computed SHAP values:
-    data_to_save = {
-        "clf_dict": clf_dict,
-        "unique_times": unique_times,
-        "interval_shap_values": interval_shap_values,
-        "y_train_surv": y_train_surv,
-        "y_pred_surv": y_pred_surv,
-        "dpi": DPI_RES,
-    }
+    # ## dump trained model dictionary, predictions, and computed SHAP values:
+    # data_to_save = {
+    #     "clf_dict": clf_dict,
+    #     "unique_times": unique_times,
+    #     "interval_shap_values": interval_shap_values,
+    #     "y_train_surv": y_train_surv,
+    #     "y_pred_surv": y_pred_surv,
+    #     "dpi": DPI_RES,
+    # }
 
-    filename = f"saved_data_{len(X)}.pkl"
+    # filename = f"saved_data_{len(X)}.pkl"
 
-    with open(filename, "wb") as file:
-        pickle.dump(data_to_save, file)
+    # with open(filename, "wb") as file:
+    #     pickle.dump(data_to_save, file)
 
     ### If running on a notebook, you can re-open the stored data and model
     # directly from this point onward
 
     # %% now iterate over single samples to be explained (for each interval)
 
-    load_size = len(X)
+    # load_size = len(X)
 
-    with open(f"saved_data_{load_size}.pkl", "rb") as f:
-        data = pickle.load(f)
-        clf_dict = data["clf_dict"]
-        unique_times = data["unique_times"]
-        interval_shap_values = data["interval_shap_values"]
-        y_train_surv = data["y_train_surv"]
-        y_pred_surv = data["y_pred_surv"]
-        DPI_RES = data["dpi"]
+    # with open(f"saved_data_{load_size}.pkl", "rb") as f:
+    #     data = pickle.load(f)
+    #     clf_dict = data["clf_dict"]
+    #     unique_times = data["unique_times"]
+    #     interval_shap_values = data["interval_shap_values"]
+    #     y_train_surv = data["y_train_surv"]
+    #     y_pred_surv = data["y_pred_surv"]
+    #     DPI_RES = data["dpi"]
 
     # examples to explain: 3 for draft run, 12 for full data
-    N = 3 if DRAFT_RUN else 12
+    N = 3 if DRAFT_RUN else 8
 
     for i in range(N):
 
@@ -305,9 +300,7 @@ if __name__ == "__main__":
         with open(f"temp_plot_surv_{i}.mpl", "wb") as file:
             pickle.dump(plt.gcf(), file)
         if i == 7:  # extra plot for Thesis manuscript
-            plt.legend(
-                fontsize=round(6 * (DPI_RES / 72))
-            )  # loc='auto' or 'upper right'
+            plt.legend(fontsize=round(6 * (DPI_RES / 72)))  # loc='auto' or 'upper right'
             plt.savefig(
                 os.path.join(
                     general_figs_folder,
@@ -319,9 +312,7 @@ if __name__ == "__main__":
             )
         plt.legend(fontsize=round(7 * (DPI_RES / 72)))  # loc='auto' or 'upper right'
         plt.savefig(
-            os.path.join(
-                general_figs_folder, "survival-curves", f"survival_curve_idx{i}.png"
-            ),
+            os.path.join(general_figs_folder, "survival-curves", f"survival_curve_idx{i}.png"),
             bbox_inches="tight",
             dpi=DPI_RES,
         )
@@ -350,8 +341,8 @@ if __name__ == "__main__":
 
         for key, value in interval_shap_values.items():
 
-            T_start, T_end = [float(s) for s in key.split("-")]
-            index_T_end = np.argmax(unique_times > T_end) - 1
+            t_start, t_end = [float(s) for s in key.split("-")]
+            index_t_end = np.argmax(unique_times > t_end) - 1
 
             local_interv_plt_name = f"Local_SHAP_idx{i}_T{key}.pdf"
             combo_local_plt_name_pdf = f"Time-SHAP_idx{i}_combined.pdf"
@@ -364,7 +355,7 @@ if __name__ == "__main__":
                 shap_values_use.values[np.isnan(shap_values_use.values)] = 0
                 warnings.warn(
                     "NaN values were found when computing interval-specific SHAP values,\
-                possibly, the event is estimated to happen before the queried time interval [{T_start}-{T_end}]"
+                possibly, the S(t_start) is estimated to be = 0"
                 )
 
             ### TODOs:
@@ -391,10 +382,14 @@ if __name__ == "__main__":
 
             print(f"TIME INTERVAL: {key}")
             print(
-                f"Sample prediction auto: {shap_values_use.base_values + shap_values_use.values.sum():.4f}"
+                f"Sample prediction, SHAP based: {shap_values_use.base_values + shap_values_use.values.sum():.4f}"
             )
-            print(f"Population prediction (autom.): {shap_values_use.base_values:.4f}")
-            print(f"Population prediction (manual): {1-y_pred_pop.iloc[index_T_end]:.4f}")
+            print(
+                f"Population prediction, test data, SHAP based: {shap_values_use.base_values:.4f}"
+            )
+            print(
+                f"Population prediction, train data, 1-S({t_end:.1f}): {1-y_pred_pop.iloc[index_t_end]:.4f}"
+            )
 
             # interval loop closed, now let's load images and paste them one next to each other
 
@@ -417,8 +412,7 @@ if __name__ == "__main__":
         surv_image = Image.open(f"temp_plot_surv_{i}.png")
         local_image = Image.open(f"temp_plot_{i}_full.png")
         images = [
-            Image.open(f"temp_plot_{i}_{key}.png")
-            for key, val in interval_shap_values.items()
+            Image.open(f"temp_plot_{i}_{key}.png") for key, val in interval_shap_values.items()
         ]
         # images = [img.rotate(270, expand=True) for img in images]
 
@@ -427,27 +421,21 @@ if __name__ == "__main__":
 
         y_pad = 10  # needed not to cut off the survival curve plot title
         y_pad_intrarow = 100  # padding between top row and bottom row
-        x_pad_intrarow = -70 if i == 7 else -25  # for the Thesis picture, it still fits
+        x_pad_intrarow = -70 if i == 7 else -20  # for the Thesis picture, it still fits
 
         combo_height = max(heights) + surv_image.size[1] + y_pad + y_pad_intrarow
         combo_width = sum(widths) + x_pad_intrarow * (len(widths) - 1)  # N-1 gaps
 
         # Create a new image with the appropriate size to contain all the plots
-        combo_image = Image.new(
-            "RGB", (combo_width, combo_height), color=(255, 255, 255)
-        )
+        combo_image = Image.new("RGB", (combo_width, combo_height), color=(255, 255, 255))
 
         # Paste the matplotlib survival curve on top, add some padding on the x_axis
         # bear in mind, the unit of measure is in pixels so the 2 vars must be integers
         pos_left = (
-            (combo_width - surv_image.size[0] - local_image.size[0]) // 2
-            - 70 * len(widths)
-            + 70
+            (combo_width - surv_image.size[0] - local_image.size[0]) // 2 - 70 * len(widths) + 70
         )
         pos_right = (
-            (combo_width + surv_image.size[0] - local_image.size[0]) // 2
-            + 70 * len(widths)
-            - 70
+            (combo_width + surv_image.size[0] - local_image.size[0]) // 2 + 70 * len(widths) - 70
         )
 
         combo_image.paste(surv_image, (pos_left, y_pad))
@@ -461,9 +449,7 @@ if __name__ == "__main__":
         )  # Pasting below the survival curve image
         for img in images:
             combo_image.paste(img, (x_offset, y_offset))
-            x_offset += img.size[
-                0
-            ]  # Update the x_offset by the width of the current image
+            x_offset += img.size[0]  # Update the x_offset by the width of the current image
             x_offset += x_pad_intrarow  # And add the x padding
 
         # combo_image.save(os.path.join(general_figs_folder, combo_local_plt_name))
@@ -474,25 +460,17 @@ if __name__ == "__main__":
         # add title image on top of the current collage
 
         TITLE_SHAP_PLOT = "Time-SHAP explanation"  # for sample instance i={i}
-        font_size = round(
-            28 * (DPI_RES / 72)
-        )  # Adjust title size. Scale is relative to dpi=72
-        font = ImageFont.truetype(
-            "arial.ttf", font_size
-        )  # insert correct font path here
+        font_size = round(28 * (DPI_RES / 72))  # Adjust title size. Scale is relative to dpi=72
+        font = ImageFont.truetype("arial.ttf", font_size)  # insert correct font path here
         # font = ImageFont.truetype("DejaVuSans.ttf", font_size) #insert correct font path here
 
         # Determine the size required for the title text
-        draw = ImageDraw.Draw(
-            Image.new("RGB", (10, 10))
-        )  # Temp image for calculating text size
+        draw = ImageDraw.Draw(Image.new("RGB", (10, 10)))  # Temp image for calculating text size
         try:  # newer Pillow >=11.3.0
             bbox = draw.textbbox((0, 0), TITLE_SHAP_PLOT, font=font)
             text_width, text_height = bbox[2] - bbox[0], bbox[3] - bbox[1]
         except AttributeError:  # older Pillow versions, probably Pillow <10.0
-            text_width, text_height = draw.textsize(
-                TITLE_SHAP_PLOT, font=font
-            )  # older Pillow
+            text_width, text_height = draw.textsize(TITLE_SHAP_PLOT, font=font)  # older Pillow
 
         v_padding = 20  # otherwise bottom part of the title can be cut
 
@@ -541,11 +519,11 @@ if __name__ == "__main__":
         os.remove(f"temp_plot_surv_{i}.mpl")
         os.remove(f"temp_plot_{i}_full.png")
 
+        # TODO: improve management of intervals and keys (tuples vs strings)
+
         for key, value in interval_shap_values.items():
             os.remove(f"temp_plot_{i}_{key}.png")
 
         t1_local_explains = datetime.now()
-        time_local_explains = format_timedelta(
-            t1_local_explains - t0_local_explains, "mm:ss:ms"
-        )
+        time_local_explains = format_timedelta(t1_local_explains - t0_local_explains, "mm:ss:ms")
         print(f"Plotted time-SHAP explanations in: {time_local_explains}")
