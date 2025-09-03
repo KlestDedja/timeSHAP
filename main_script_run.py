@@ -48,21 +48,8 @@ if __name__ == "__main__":
         X = X[:500]
         y = y[:500]
 
-    if np.max(y["time"]) > 100:
-        y_time_years = y["time"]  # .astype(np.float64)
-        y_time_years = y_time_years / 365
-        y["time"] = y_time_years
-
-    # Default location for storing result figures and plots
-    general_figs_folder = os.path.join(root_folder, "figures")
-    interval_figs_folder = os.path.join(root_folder, "figures", "interval-plots")
-
-    # choose whether to store in `draft-figures` folder (in .gitignore)
-    # or in the normal `figures` folder
-    fig_folder = (
-        "draft-figures" if len(X) > 500 else "figures"
-    )  # pylint: disable=invalid-name
-
+    # Set location for storing result figures and plots
+    fig_folder = "draft-figures" if DRAFT_RUN else "figures"
     general_figs_folder = os.path.join(root_folder, fig_folder)
     interval_figs_folder = os.path.join(root_folder, fig_folder, "interval-plots")
 
@@ -104,9 +91,9 @@ if __name__ == "__main__":
     plt.figure()
     plt.title("Survival function $S(t)$", fontsize=FONTSIZE + 2)
     # plt.plot(unique_times, y_surv)
-    plt.plot(unique_times * 365, y_surv_smooth, lw=2)
+    plt.plot(unique_times, y_surv_smooth, lw=2)
     plt.xlabel("time $t$", fontsize=FONTSIZE)
-    plt.xlim(0, 5020)
+    plt.xlim(0, max(unique_times)*1.02)
     plt.ylabel("$S(t)$", fontsize=FONTSIZE)
     plt.ylim(0, 1.05)
     plt.savefig(os.path.join(root_folder, fig_folder, "survival-curve-example.pdf"))
@@ -115,9 +102,9 @@ if __name__ == "__main__":
     plt.figure()
     plt.title(r"Cum. Hazard function $\Lambda(t)$", fontsize=FONTSIZE + 2)
     # plt.plot(unique_times, y_hazard)
-    plt.plot(unique_times * 365, y_hazard_smooth, lw=2)
+    plt.plot(unique_times, y_hazard_smooth, lw=2)
     plt.xlabel("time $t$", fontsize=FONTSIZE)
-    plt.xlim(0, 5020)
+    plt.xlim(0, max(unique_times)*1.02)
     plt.ylabel(r"$\Lambda(t)$", fontsize=FONTSIZE)
     plt.savefig(os.path.join(root_folder, fig_folder, "cum-hazard-curve-example.pdf"))
     plt.show()
@@ -125,12 +112,12 @@ if __name__ == "__main__":
     plt.figure()
     plt.title(r"Hazard function $\lambda(t)$", fontsize=FONTSIZE + 2)
     # plt.plot(unique_times, dy_hazard)
-    plt.plot(unique_times * 365, 100 * dy_hazard_smooth, lw=2)
+    plt.plot(unique_times, 100 * dy_hazard_smooth, lw=2)
     plt.axhline(
         0, color="gray", linestyle="--", linewidth=1, zorder=0
     )  # thin line at y=0
     plt.xlabel("time $t$", fontsize=FONTSIZE)
-    plt.xlim(0, 5020)
+    plt.xlim(0, max(unique_times)*1.02)
     plt.ylabel(r"$100\:\lambda(t)$", fontsize=FONTSIZE)
     plt.savefig(os.path.join(root_folder, fig_folder, "hazard-curve-example.pdf"))
     plt.show()
@@ -181,15 +168,9 @@ if __name__ == "__main__":
     (loop over such intervals, binarise outputs, store resulting SHAP values)
     """
     # split timeline in intervals and explain each segment
-    # time_intervals = [0, 1720, 3440, 5160] #in days
-    time_intervals = [
-        0,
-        3.5,
-        7,
-        10.5,
-        14,
-    ]  # in years (this gives nice plots, but very long)
-    time_intervals = [0, 5, 10, 14]  # in years
+    # this first one gives nice plots, but very long
+    time_intervals = [ 0, 3.5, 7, 10.5, 14]
+    time_intervals = [0, 1800, 3650, 5200]
 
     # time_intervals = [0, 5, 10, 14] #in years
     for i, t_i in enumerate(range(len(time_intervals) - 1)):
