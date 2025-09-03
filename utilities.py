@@ -6,9 +6,9 @@ Created on Thu Feb 15 16:45:47 2024
 @institution:  KU Leuven
 """
 
+import warnings
 import numpy as np
 import pandas as pd
-import warnings
 import matplotlib.pyplot as plt
 from sksurv.tree import SurvivalTree
 from sksurv.ensemble import GradientBoostingSurvivalAnalysis, RandomSurvivalForest
@@ -290,7 +290,7 @@ class SurvivalModelConverter:
         # element_start <= t_start and element_end < t_end. Remember argmax returns the FIRST maximum arg
         # TODO busy right here:
         index_start = np.argmax(tree_obj.unique_times_ > self.t_start) - 1
-        index_end = np.argmax(tree_obj.unique_times_ >= self.t_end) - 1
+        index_end = np.argmax(tree_obj.unique_times_ > self.t_end) - 1
         # This leaves out some edge cases, treated here below:
         # if self.t_start is smaller than all `unique_times_`
         if tree_obj.unique_times_[0] > self.t_start:
@@ -313,14 +313,16 @@ class SurvivalModelConverter:
             "auto",
         ]:
             # Compute conditional probabilities (for each tree).
-            conditional_Pt = (
-                1
-                - tree_obj.tree_.value[:, index_end, 1]
-                / tree_obj.tree_.value[:, index_start, 1]
-            ).reshape(-1, 1)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                conditional_prob = (
+                    1
+                    - tree_obj.tree_.value[:, index_end, 1]
+                    / tree_obj.tree_.value[:, index_start, 1]
+                ).reshape(-1, 1)
             # Handle division by zero or NaN values
-            conditional_Pt[np.isnan(conditional_Pt)] = self.fallback_prob_ratio
-            tree_dict["values"] = conditional_Pt
+            conditional_prob[np.isnan(conditional_prob)] = self.fallback_prob_ratio
+            tree_dict["values"] = conditional_prob
 
             # store probability for which the event is conditioned upon: 1 - S(t)
             tree_dict["prior_values"] = 1 - tree_obj.tree_.value[
@@ -344,14 +346,14 @@ class SurvivalModelConverter:
 
         elif isinstance(tree_obj, SurvivalTree) and output_format in ["survival"]:
             # Compute conditional survival probabilities (for each tree).
-            conditional_St = (
+            conditional_surv = (
                 tree_obj.tree_.value[:, index_end, 1]
                 / tree_obj.tree_.value[:, index_start, 1]
             ).reshape(-1, 1)
-            conditional_St[np.isnan(conditional_St)] = (
+            conditional_surv[np.isnan(conditional_surv)] = (
                 1 - self.fallback_prob_ratio
             )  # S(t)= 1-P(t)
-            tree_dict["values"] = conditional_St
+            tree_dict["values"] = conditional_surv
             # store probability of survival until time t: S(t)
             tree_dict["prior_values"] = tree_obj.tree_.value[:, index_start, 0].reshape(
                 -1, 1
@@ -470,16 +472,16 @@ class SurvivalModelConverter:
 #                 raise ValueError(f'Value for t_end={t_end:.4f} is too small. Mus be greater than {tree_obj.unique_times_:.4f}')
 
 
-#             conditional_Pt = (1 - tree.value[:,index_end, 1] / tree.value[:,index_start, 1]).reshape(-1, 1)
+#             conditional_prob = (1 - tree.value[:,index_end, 1] / tree.value[:,index_start, 1]).reshape(-1, 1)
 #             # Reshape needed for consistent outputs (skelarn + SHAP)
 #             # division by zero is possible if some S(t) are = 0 in index_start.
 #             # Leave SHAP values equal to NaN if that happens
-#             if np.isnan(conditional_Pt).sum() > 0:
-#                 conditional_Pt[np.isnan(conditional_Pt)] = fallback_prob_ratio
+#             if np.isnan(conditional_prob).sum() > 0:
+#                 conditional_prob[np.isnan(conditional_prob)] = fallback_prob_ratio
 #             #     # warning should be raised for individual instances
 #             #     # warnings.warn('NaN values were found when computing interval-specific SHAP values,\
 #             #     # possibly, the event is estimated to happen before the queried time interval [{t_start}-{t_end}]')
-#             tree_dict["values"]  = conditional_Pt
+#             tree_dict["values"]  = conditional_prob
 
 #         else:
 #             raise ValueError('Input not recognized. Double check')

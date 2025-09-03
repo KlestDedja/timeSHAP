@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw, ImageFont  # stitch images together, write text etc.
 from IPython.display import display
 
-from sklearn.model_selection import train_test_split, KFold
+from sklearn.model_selection import train_test_split
 from sksurv.ensemble import RandomSurvivalForest
 from sksurv.metrics import concordance_index_censored as c_index
 
@@ -98,9 +98,12 @@ if __name__ == "__main__":
 
     from utilities import rolling_kernel
 
-    y_surv_smooth = rolling_kernel(y_surv, kernel_size=2)  # before was = 20, not important
-    y_hazard_smooth = rolling_kernel(y_hazard, kernel_size=2)
-    dy_hazard_smooth = rolling_kernel(dy_hazard, kernel_size=2)
+    # smoothen out S(t), Lambda(t) and lambda(t) curves (prettify)
+    KERNEL_SIZE = 20 if len(unique_times) > 200 else 2
+
+    y_surv_smooth = rolling_kernel(y_surv, kernel_size=KERNEL_SIZE)
+    y_hazard_smooth = rolling_kernel(y_hazard, kernel_size=KERNEL_SIZE)
+    dy_hazard_smooth = rolling_kernel(dy_hazard, kernel_size=KERNEL_SIZE)
 
     plt.figure()
     plt.title("Survival function $S(t)$", fontsize=FONTSIZE + 2)
@@ -111,7 +114,10 @@ if __name__ == "__main__":
     plt.ylabel("$S(t)$", fontsize=FONTSIZE)
     plt.ylim(0, 1.05)
     plt.savefig(os.path.join(root_folder, fig_folder, "survival-curve-example.pdf"))
-    plt.show()
+    if DRAFT_RUN:
+        plt.show(block=False)
+        plt.pause(0.4)
+    plt.close()
 
     plt.figure()
     plt.title(r"Cum. Hazard function $\Lambda(t)$", fontsize=FONTSIZE + 2)
@@ -121,7 +127,10 @@ if __name__ == "__main__":
     plt.xlim(0, max(unique_times)*1.02)
     plt.ylabel(r"$\Lambda(t)$", fontsize=FONTSIZE)
     plt.savefig(os.path.join(root_folder, fig_folder, "cum-hazard-curve-example.pdf"))
-    plt.show()
+    if DRAFT_RUN:
+        plt.show(block=False)
+        plt.pause(0.4)
+    plt.close()
 
     plt.figure()
     plt.title(r"Hazard function $\lambda(t)$", fontsize=FONTSIZE + 2)
@@ -132,12 +141,10 @@ if __name__ == "__main__":
     plt.xlim(0, max(unique_times) * 1.02)
     plt.ylabel(r"$100\:\lambda(t)$", fontsize=FONTSIZE)
     plt.savefig(os.path.join(root_folder, fig_folder, "hazard-curve-example.pdf"))
-    plt.show()
-
-    # %%
-
-    unique_times = clf.unique_times_
-    interval_shap_values = {}
+    if DRAFT_RUN:
+        plt.show(block=False)
+        plt.pause(0.4)
+    plt.close()
 
     convert_all = SurvivalModelConverter(clf_obj=clf, t_start=0, t_end=max(unique_times) * 1.02)
 
@@ -171,7 +178,10 @@ if __name__ == "__main__":
         bbox_inches="tight",
         dpi=DPI_RES,
     )
-    plt.show()
+    if DRAFT_RUN:
+        plt.show(block=False)
+        plt.pause(0.4)
+    plt.close()
 
     """
     LOCAL EXPLANATIONS HERE: split explanations in time intervals
@@ -179,10 +189,12 @@ if __name__ == "__main__":
     """
     # split timeline in intervals and explain each segment
     time_intervals = [0, 1250, 2500, 4000, 5200]  # longer version
-    # nice plots, but a bit too many. Shorter version:
-    time_intervals = [0, 1800, 3600, 5100]
+    # ^ nice plots, but a bit too many. Shorter version below:
+    time_intervals = [0, 2500, 5100]
 
-    # time_intervals = [0, 2, 4, 6]
+    # Store interval shap values as dictionary here (intervals as keys):
+    interval_shap_values = {}
+
 
     for i, t_i in enumerate(range(len(time_intervals) - 1)):
 
@@ -213,36 +225,6 @@ if __name__ == "__main__":
         shap_values_int = format_SHAP_values(shap_values_int, clf, X_test)
         interval_shap_values[f"{str(t_start)}-{str(t_end)}"] = shap_values_int
 
-    # ## dump trained model dictionary, predictions, and computed SHAP values:
-    # data_to_save = {
-    #     "clf_dict": clf_dict,
-    #     "unique_times": unique_times,
-    #     "interval_shap_values": interval_shap_values,
-    #     "y_train_surv": y_train_surv,
-    #     "y_pred_surv": y_pred_surv,
-    #     "dpi": DPI_RES,
-    # }
-
-    # filename = f"saved_data_{len(X)}.pkl"
-
-    # with open(filename, "wb") as file:
-    #     pickle.dump(data_to_save, file)
-
-    ### If running on a notebook, you can re-open the stored data and model
-    # directly from this point onward
-
-    # %% now iterate over single samples to be explained (for each interval)
-
-    # load_size = len(X)
-
-    # with open(f"saved_data_{load_size}.pkl", "rb") as f:
-    #     data = pickle.load(f)
-    #     clf_dict = data["clf_dict"]
-    #     unique_times = data["unique_times"]
-    #     interval_shap_values = data["interval_shap_values"]
-    #     y_train_surv = data["y_train_surv"]
-    #     y_pred_surv = data["y_pred_surv"]
-    #     DPI_RES = data["dpi"]
 
     # examples to explain: 3 for draft run, 12 for full data
     N = 3 if DRAFT_RUN else 8
@@ -363,6 +345,7 @@ if __name__ == "__main__":
             # - rethink the probability outputs: rescale them? They are not very intuititve atm
             # - change notation e.g. E(f(X)) and similar
 
+            # Making figures and plots of the correct size
             single_plotwidth = max(3.4, 7 - len(interval_shap_values))
             fig, ax = plt.subplots(figsize=(single_plotwidth, 7))
             plt.sca(ax)  # make this Axes current for SHAP
@@ -422,7 +405,7 @@ if __name__ == "__main__":
 
         y_pad = 10  # needed not to cut off the survival curve plot title
         y_pad_intrarow = 100  # padding between top row and bottom row
-        x_pad_intrarow = -70 if i == 7 else -20  # for the Thesis picture, it still fits
+        x_pad_intrarow = -70 if len(images) > 2 else 0
 
         combo_height = max(heights) + surv_image.size[1] + y_pad + y_pad_intrarow
         combo_width = sum(widths) + x_pad_intrarow * (len(widths) - 1)  # N-1 gaps
