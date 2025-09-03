@@ -86,7 +86,7 @@ if __name__ == "__main__":
     y_pred_surv = pd.DataFrame(y_pred_surv, columns=unique_times)
 
     IDX_PLOT = (
-        1  # meaningful example is idx = 36 for data with size = 700, and idx =1 for the full data
+        1  # meaningful example is idx = 36 for example data with size = 700, and idx =1 for the full data
     )
     FONTSIZE = 14
 
@@ -190,7 +190,7 @@ if __name__ == "__main__":
     # split timeline in intervals and explain each segment
     time_intervals = [0, 1250, 2500, 4000, 5200]  # longer version
     # ^ nice plots, but a bit too many. Shorter version below:
-    time_intervals = [0, 2500, 5100]
+    time_intervals = [0, 1800, 3600, 5100]
 
     # Store interval shap values as dictionary here (intervals as keys):
     interval_shap_values = {}
@@ -242,7 +242,7 @@ if __name__ == "__main__":
 
         """ survival plot here, dump as .mpl file"""
 
-        plt.figure()  # figsize will is overwritten after reloading,
+        plt.figure()  # figsize will be overwritten after reloading,
         plt.suptitle("Predicted survival curve", size=round(8 * (DPI_RES / 72)), y=0.98)
         plt.step(
             y_pred_i.index,
@@ -272,23 +272,21 @@ if __name__ == "__main__":
 
         for t in time_intervals:
             plt.axvline(x=t, color="k", linestyle="--", linewidth=1, alpha=0.7)
-        plt.xlabel("time", fontsize=round(8 * (DPI_RES / 72)))
+        plt.xlabel("time", fontsize=round(7 * (DPI_RES / 72)))
         plt.xlim([0, None])
-        plt.xticks(fontsize=round(8 * (DPI_RES / 72)))
-        plt.ylim([0.4, 1.0])
-        plt.ylabel("Survival over time", fontsize=round(8 * (DPI_RES / 72)))
-        plt.yticks(np.arange(0.2, 1.15, 0.2), None, fontsize=round(8 * (DPI_RES / 72)))
+        plt.xticks(fontsize=round(7 * (DPI_RES / 72)))
+        plt.ylabel("Survival over time", fontsize=round(7 * (DPI_RES / 72)))
+        plt.yticks(np.arange(0.2, 1.15, 0.2), None, fontsize=round(7 * (DPI_RES / 72)))
         plt.yticks(np.arange(0.1, 1, 0.2), None, minor=True)
-        plt.legend(fontsize=round(7 * (DPI_RES / 72)))  # loc='auto' or 'upper right'
+        plt.legend(fontsize=round(6 * (DPI_RES / 72)))  # loc='auto' or 'upper right'
         with open(f"temp_plot_surv_{i}.mpl", "wb") as file:
             pickle.dump(plt.gcf(), file)
-        plt.legend(fontsize=round(7 * (DPI_RES / 72)))  # loc='auto' or 'upper right'
+        plt.legend(fontsize=round(6 * (DPI_RES / 72)))  # loc='auto' or 'upper right'
         plt.savefig(
             os.path.join(general_figs_folder, "survival-curves", f"survival_curve_idx{i}.png"),
             bbox_inches="tight",
             dpi=DPI_RES,
         )
-        # plt.show()
         plt.close()
 
         """ local SHAP plot here: computed over entire interval """
@@ -297,13 +295,12 @@ if __name__ == "__main__":
         fig, ax = plt.subplots(figsize=(5, 5))
         plt.sca(ax)  # make this Axes current for SHAP
         ax = shap.plots.waterfall(shap_values[i], max_display=10, show=False)
-        ax.set_title("Output explanation", fontsize=round(8 * (DPI_RES / 72)))
+        ax.set_title("Output explanation, full interval", fontsize=round(7 * (DPI_RES / 72)))
         fig.savefig(
             os.path.join(general_figs_folder, "local-SHAP", local_plt_name),
             bbox_inches="tight",
         )
         fig.savefig(f"temp_plot_{i}_full.png", bbox_inches="tight", dpi=DPI_RES)
-        # plt.show()
         plt.close(fig)  # Close the figure to free up memory
 
         """
@@ -373,9 +370,9 @@ if __name__ == "__main__":
 
         # Update the figure size
         # fit survival plot and local SHAP plot over the entire interval
-        width_pad_prop = 0.05
+        width_pad_prop = 0.03
         tot_width = single_plotwidth * (len(interval_shap_values) - 1)
-        fig.set_size_inches((1 - 2 * width_pad_prop) * tot_width, 5.3, forward=True)
+        fig.set_size_inches((1 -  width_pad_prop) * tot_width, 5.3, forward=True)
         plt.tight_layout()
         plt.savefig(f"temp_plot_surv_{i}.png", bbox_inches="tight", dpi=DPI_RES)
         # plt.show()
@@ -405,10 +402,10 @@ if __name__ == "__main__":
         # Paste the matplotlib survival curve on top, add some padding on the x_axis
         # bear in mind, the unit of measure is in pixels so the 2 vars must be integers
         pos_left = (
-            (combo_width - surv_image.size[0] - local_image.size[0]) // 2 - 70 * len(widths) + 70
+            (combo_width - surv_image.size[0] - local_image.size[0]) // 2 + x_pad_intrarow * len(widths) - x_pad_intrarow
         )
         pos_right = (
-            (combo_width + surv_image.size[0] - local_image.size[0]) // 2 + 70 * len(widths) - 70
+            (combo_width + surv_image.size[0] - local_image.size[0]) // 2 - x_pad_intrarow * len(widths) + x_pad_intrarow
         )
 
         combo_image.paste(surv_image, (pos_left, y_pad))

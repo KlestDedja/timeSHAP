@@ -130,29 +130,29 @@ def predict_hazard_function(clf, X, event_times="auto", smooth=False):
 # from scipy.stats import gaussian_kde
 
 
-def rolling_kernel(curve, kernel_size=10, kernel=None):
+def rolling_kernel(curve, kernel_size=10):
 
-    if kernel_size == None:
-        kernel_size = 10
 
     if isinstance(kernel_size, int):
-        out_kernel = np.ones(kernel_size) / kernel_size  # 1/ N N times (uniform)
-
-    if kernel is not None:  # normalise it, if not done already
-        out_kernel = kernel / np.sum(kernel)
-
+        out_kernel = np.ones(kernel_size) / kernel_size  # 1/ N, N times (uniform)
+        out_kernel = out_kernel / np.sum(out_kernel)
+    else:
+        raise ValueError("kernel_size must be an integer.")
     # Smooth the array along the rows
-    smoothed_curve = np.convolve(curve, out_kernel, mode="valid")
-    pad_l = len(curve) - len(smoothed_curve)
+    if kernel_size > 1:
+        smoothed_curve = np.convolve(curve, out_kernel, mode="valid")
+        pad_l = len(curve) - len(smoothed_curve)
 
-    end_values = (curve[0], curve[-1])
+        end_values = (curve[0], curve[-1])
 
-    padded_curve = np.pad(
-        smoothed_curve,
-        pad_width=(pad_l // 2, pad_l - pad_l // 2),
-        mode="linear_ramp",
-        end_values=end_values,
-    )
+        padded_curve = np.pad(
+            smoothed_curve,
+            pad_width=(pad_l // 2, pad_l - pad_l // 2),
+            mode="linear_ramp",
+            end_values=end_values,
+        )
+    else:
+        padded_curve = curve
 
     return padded_curve
 
@@ -399,147 +399,6 @@ class SurvivalModelConverter:
                 "Inconsistent output formats or ensemble classes in tree list."
             )
         return output_formats.pop(), ensemble_classes.pop()
-
-    # def compute_prior_value(self, X, y=None):
-
-
-# %%
-
-
-# from sklearn.ensemble import RandomForestClassifier
-# from sksurv.ensemble import RandomSurvivalForest
-# from sksurv.tree import SurvivalTree
-
-# def SDT_to_dict_interval(clf_obj, idx, output_format, t_start=0, t_end=2, fallback_prob_ratio=0):
-
-
-#     ''' Compatible with single output trees only, at the moment.
-#         compatible with SurvivalTree learners of a RandomSurvivalForest
-#         (scikit-survival 0.21)
-#         and possibly with GradientBosostingSurvivalAnalysis
-#     '''
-
-#     # GBS case needs to be converted:
-#     if isinstance(clf_obj[idx], np.ndarray) and output_format in ["hazard-ratio", "auto"]:
-
-#         if clf_obj.dropout_rate > 0:
-#             raise ValueError('Dropout rate > 0 is not compatible with SHAP adaptation!')
-
-#         assert clf_obj[idx].shape == (1,) #is an array with the Tree as single element: GBS in sksurv
-#         tree_obj = clf_obj[idx][0]
-#     else:
-#         tree_obj = clf_obj[idx] # in a RSF, Survival Trees can be called as clf[i]
-
-#     tree = tree_obj.tree_
-
-#     tree_dict = {
-#         "children_left" : tree.children_left,
-#         "children_right" : tree.children_right,
-#         "children_default" : tree.children_right.copy(), # to be changed when sklearn can handle missing values
-#         "features" : tree.feature,
-#         "thresholds" : tree.threshold,
-#         "node_sample_weight": tree.weighted_n_node_samples,
-#         "n_features_in_": getattr(tree_obj, "n_features_in_", None),
-#         "feature_names_in_": getattr(clf_obj, "feature_names_in_", None),
-#         "unique_times_": getattr(tree_obj, "unique_times_", None),
-#         "is_event_time_": getattr(tree_obj, "is_event_time_", None),
-#         "random_state": getattr(tree_obj, "random_state", None),
-#         "ensemble_class": clf_obj.__class__.__name__,
-#         "learner_class": tree_obj.__class__.__name__
-#     }
-
-#     tree_dict['output_format'] = output_format
-
-#     if isinstance(tree_obj, SurvivalTree):
-
-#         if tree_dict['unique_times_'] is None and output_format not in ['probability']:
-#             raise KeyError('Missing \'unique_times_\' in SurvivalTree-based ensemble.')
-
-#         if t_end is None and tree_dict['unique_times_'] is not None: # select median time to (any) event
-#             t_end = tree_dict['unique_times_'][len(tree_dict['unique_times_'])//2]
-
-
-#         if output_format in ["probability", "auto"]:
-#             # pick last "False" index before "True" appears
-#             index_start = np.argmax(tree_obj.unique_times_ > t_start)-1
-#             index_end = np.argmax(tree_obj.unique_times_ > t_end) -1
-
-#             # it DOES work when all unique_times_ are < T_bin, as it will again select 0-1= -1
-#             # it does not work when all times are > T_bin, as it selects -1 instead of 0
-#             if min(tree_obj.unique_times_) > t_start:
-#                 index_start = 0
-#             if min(tree_obj.unique_times_) > t_end:
-#                 raise ValueError(f'Value for t_end={t_end:.4f} is too small. Mus be greater than {tree_obj.unique_times_:.4f}')
-
-
-#             conditional_prob = (1 - tree.value[:,index_end, 1] / tree.value[:,index_start, 1]).reshape(-1, 1)
-#             # Reshape needed for consistent outputs (skelarn + SHAP)
-#             # division by zero is possible if some S(t) are = 0 in index_start.
-#             # Leave SHAP values equal to NaN if that happens
-#             if np.isnan(conditional_prob).sum() > 0:
-#                 conditional_prob[np.isnan(conditional_prob)] = fallback_prob_ratio
-#             #     # warning should be raised for individual instances
-#             #     # warnings.warn('NaN values were found when computing interval-specific SHAP values,\
-#             #     # possibly, the event is estimated to happen before the queried time interval [{t_start}-{t_end}]')
-#             tree_dict["values"]  = conditional_prob
-
-#         else:
-#             raise ValueError('Input not recognized. Double check')
-
-#     else:
-#         raise ValueError("Combination of learner \'{}\' and scenario \'{}\' not recognized".format(tree_obj.__class__.__name__, output_format))
-
-#     tree_dict["base_offset"] = tree_dict['values'][0] # root node (0) prediction
-
-#     return tree_dict
-
-
-# def tree_list_to_dict_model(tree_list, is_gradient_based=False, learning_weight=1.0):
-
-#     ''' given each learner is stored as a dict, create a list of such dicts.
-#     NOTE: the SHAP library assumes that the input custom tree models are
-#     additive, which is not the case for ensemble methods such as RFs
-#     However, RF-like ensembles can be seen as additive models with
-#     learning_rate = 1/n_estimators
-
-#     Finally, we drop the assumption that the learning rate is constant across
-#     iterations. the vector of learning rates can be passed directly here
-#     '''
-
-#     # generalise constant learning rate case, for compatibility with
-#     # non-constant learning rate. Procedure is the same regardless of
-#     # whether the ensemble is gradient based or not
-#     if isinstance(learning_weight, type(None)):
-#         learning_weight = 1.0
-#     if isinstance(learning_weight, (float, int)):
-#         learning_weight = np.array([learning_weight]*len(tree_list))
-
-#     for i, t in enumerate(tree_list): # multiply (or divide?) by learning rate here
-#         t["values"] =  t["values"]*learning_weight[i]
-#         t['base_offset'] = t['base_offset']*learning_weight[i]
-
-#     if is_gradient_based: # Gradient Boosting case: take root value of first tree (should be ~0 anyway)
-#         base_offset = tree_list[0]['base_offset'][0]
-
-#     else: # not gradient case: y-s are fitted independently. Possibly different weights were passed with learning_weight
-#         # why np.mean and not np.sum, is it not resdcaled to suit the additivity set-up already?
-#         base_offset = np.mean(np.array([t['base_offset'] for t in tree_list]))
-
-#     assert len(set([t['output_format'] for t in tree_list])) == 1 # consistency check
-#     assert len(set([t['ensemble_class'] for t in tree_list])) == 1 # consistency check
-
-#     output_format = tree_list[0]['output_format']
-#     ensemble_class = tree_list[0]['ensemble_class']
-
-#     model_as_dict = {
-#         "trees": tree_list, #list of dicts
-#         "base_offset": base_offset, # single value (average of array)
-#         "output_format": output_format,
-#         "ensemble_class": ensemble_class,
-#         "input_dtype": np.float32,
-#         "internal_dtype": np.float32}
-
-#     return model_as_dict
 
 
 def reduce_ensemble_object(clf, factor=10):
