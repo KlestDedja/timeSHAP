@@ -282,17 +282,6 @@ if __name__ == "__main__":
         plt.legend(fontsize=round(7 * (DPI_RES / 72)))  # loc='auto' or 'upper right'
         with open(f"temp_plot_surv_{i}.mpl", "wb") as file:
             pickle.dump(plt.gcf(), file)
-        if i == 7:  # extra plot for Thesis manuscript
-            plt.legend(fontsize=round(6 * (DPI_RES / 72)))  # loc='auto' or 'upper right'
-            plt.savefig(
-                os.path.join(
-                    general_figs_folder,
-                    "survival-curves",
-                    f"survival_curve_idx_extra{i}.pdf",
-                ),
-                bbox_inches="tight",
-                dpi=DPI_RES,
-            )
         plt.legend(fontsize=round(7 * (DPI_RES / 72)))  # loc='auto' or 'upper right'
         plt.savefig(
             os.path.join(general_figs_folder, "survival-curves", f"survival_curve_idx{i}.png"),
