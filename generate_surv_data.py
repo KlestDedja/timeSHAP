@@ -200,9 +200,7 @@ def generate_time_to_event_data(
 
     h0 = 0.1
     tot_hazard = h0 * np.exp(eta)
-    event_times = my_weibull(
-        alpha_weibull, scale=1 / tot_hazard, random_state=random_state
-    )
+    event_times = my_weibull(alpha_weibull, scale=1 / tot_hazard, random_state=random_state)
 
     return X, event_times, tot_hazard
 
@@ -324,9 +322,7 @@ time to event({p})."
     # generate event-times arising from given hazard function
     # choose whether the risk increases over time or not
 
-    event_times = my_weibull(
-        alpha_weibull, scale=1 / tot_hazard, random_state=random_state
-    )
+    event_times = my_weibull(alpha_weibull, scale=1 / tot_hazard, random_state=random_state)
 
     # We have q covariates that are in commmon with the event at hand:
     beta_censor = rng.uniform(-2, 2, q)
@@ -479,13 +475,9 @@ if __name__ == "__main__":
     # 1: 0.01   # 2: 0.1    # 3: 0.3    # 4: 1
     # flip_p = 0.5
 
-    df_surv, ys, all_info = generate_synthetic_data(
-        N, p, q, interaction_pairs, noise_level
-    )
+    df_surv, ys, all_info = generate_synthetic_data(N, p, q, interaction_pairs, noise_level)
 
-    df_surv_multi = generate_multivariate_data(
-        2 * N, 3 * p, 3 * q, interaction_pairs, noise_level
-    )
+    df_surv_multi = generate_multivariate_data(2 * N, 3 * p, 3 * q, interaction_pairs, noise_level)
 
     if SAVE_DF:
         df_surv.to_csv(simul_full_name, index=False)

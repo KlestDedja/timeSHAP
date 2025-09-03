@@ -1,9 +1,9 @@
 # timeSHAP
 
-A Python package for time-dependent SHAP (SHapley Additive exPlanations) analysis in survival models. This repository provides scripts and utilities for generating synthetic survival data, running time-dependent SHAP analyses, and visualizing results for survival models.
+A Python project (soon to be, package) for _time-dependent_ [SHAP](https://shap.readthedocs.io/en/latest/) (SHapley Additive exPlanations) explanations in survival models. This repository provides scripts and utilities for generating synthetic survival data, running time-dependent SHAP explanations for [Random Survival Forest](https://scikit-survival.readthedocs.io/en/stable/user_guide/random-survival-forest.html) models, and visualizing the generated explanations.
 
 ## Features
-- Generate synthetic survival data for benchmarking (being tested)
+- Generate synthetic survival data for benchmarking
 - Compute and visualize time-dependent SHAP values
 - Support for scikit-survival models
 - Example scripts and figures for reproducibility
