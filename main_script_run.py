@@ -178,8 +178,7 @@ if __name__ == "__main__":
     (loop over such intervals, binarise outputs, store resulting SHAP values)
     """
     # split timeline in intervals and explain each segment
-    # time_intervals = [0, 1720, 3440, 5160] #in days
-    time_intervals = [0, 1250, 2500, 4000, 5200]  # years
+    time_intervals = [0, 1250, 2500, 4000, 5200]  # longer version
     # nice plots, but a bit too many. Shorter version:
     time_intervals = [0, 1800, 3600, 5100]
 

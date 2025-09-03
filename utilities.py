@@ -159,16 +159,16 @@ def rolling_kernel(curve, kernel_size=10, kernel=None):
 
 class SurvivalModelConverter:
 
-    def __init__(self, clf_obj, T_start=0, T_end=None, baseline_Pt=0):
+    def __init__(self, clf_obj, t_start=0, t_end=None, fallback_prob_ratio=0):
         self.clf_obj = clf_obj
-        self.T_start = T_start
-        self.T_end = T_end
-        self.baseline_Pt = baseline_Pt
+        self.t_start = t_start
+        self.t_end = t_end
+        self.fallback_prob_ratio = fallback_prob_ratio
 
         params_to_validate = {
-            "T_start": T_start,
-            "T_end": T_end,
-            "baseline_Pt": baseline_Pt,
+            "t_start": t_start,
+            "t_end": t_end,
+            "fallback_prob_ratio": fallback_prob_ratio,
         }
 
         self._validate_inputs(**params_to_validate)
@@ -272,37 +272,37 @@ class SurvivalModelConverter:
         if tree_dict["unique_times_"] is None and output_format not in ["probability"]:
             raise KeyError("Missing 'unique_times_' in SurvivalTree-based ensemble.")
 
-        if self.T_end in ["end", "end_time"]:
-            self.T_end = tree_dict["unique_times_"][-1] + 1
-        if self.T_end is None and tree_dict["unique_times_"] is not None:
-            # Select median time to (any) event if self.T_end not specified
-            self.T_end = tree_dict["unique_times_"][
+        if self.t_end in ["end", "end_time"]:
+            self.t_end = tree_dict["unique_times_"][-1] + 1
+        if self.t_end is None and tree_dict["unique_times_"] is not None:
+            # Select median time to (any) event if self.t_end not specified
+            self.t_end = tree_dict["unique_times_"][
                 len(tree_dict["unique_times_"]) // 2
             ]
 
-        if self.T_end is not None and self.T_end <= self.T_start:
+        if self.t_end is not None and self.t_end <= self.t_start:
             raise ValueError(
-                f"Endpoint {self.T_end} is not strictly greater than T_start={self.T_start}"
+                f"Endpoint {self.t_end} is not strictly greater than t_start={self.t_start}"
             )
 
-        # Compute indices for self.T_start and self.T_end in `unique_times_`
+        # Compute indices for self.t_start and self.t_end in `unique_times_`
         # identifies the last element of (sorted array) unique_times_ such that
-        # element_start <= T_start and element_end < T_end. Remember argmax returns the FIRST maximum arg
+        # element_start <= t_start and element_end < t_end. Remember argmax returns the FIRST maximum arg
         # TODO busy right here:
-        index_start = np.argmax(tree_obj.unique_times_ > self.T_start) - 1
-        index_end = np.argmax(tree_obj.unique_times_ >= self.T_end) - 1
+        index_start = np.argmax(tree_obj.unique_times_ > self.t_start) - 1
+        index_end = np.argmax(tree_obj.unique_times_ >= self.t_end) - 1
         # This leaves out some edge cases, treated here below:
-        # if self.T_start is smaller than all `unique_times_`
-        if tree_obj.unique_times_[0] > self.T_start:
+        # if self.t_start is smaller than all `unique_times_`
+        if tree_obj.unique_times_[0] > self.t_start:
             index_start = 0
-        # if self.T_end is greater than all `unique_times_`: not allowed!
-        if tree_obj.unique_times_[0] > self.T_end:
+        # if self.t_end is greater than all `unique_times_`: not allowed!
+        if tree_obj.unique_times_[0] > self.t_end:
             raise ValueError(
-                f"T_end={self.T_end:.4f} is too small. Must be greater than {min(tree_obj.unique_times_):.4f}"
+                f"t_end={self.t_end:.4f} is too small. Must be greater than {min(tree_obj.unique_times_):.4f}"
             )
         if index_start >= index_end and index_end != -1:
             raise ValueError(
-                f"Provided interval: [{self.T_start}, {self.T_end}) is too narrow, no `unique_times_` are available."
+                f"Provided interval: [{self.t_start}, {self.t_end}) is too narrow, no `unique_times_` are available."
             )
 
         # MEMENTO: tree.value[node, sample, 0] represents H(t)
@@ -319,7 +319,7 @@ class SurvivalModelConverter:
                 / tree_obj.tree_.value[:, index_start, 1]
             ).reshape(-1, 1)
             # Handle division by zero or NaN values
-            conditional_Pt[np.isnan(conditional_Pt)] = self.baseline_Pt
+            conditional_Pt[np.isnan(conditional_Pt)] = self.fallback_prob_ratio
             tree_dict["values"] = conditional_Pt
 
             # store probability for which the event is conditioned upon: 1 - S(t)
@@ -349,7 +349,7 @@ class SurvivalModelConverter:
                 / tree_obj.tree_.value[:, index_start, 1]
             ).reshape(-1, 1)
             conditional_St[np.isnan(conditional_St)] = (
-                1 - self.baseline_Pt
+                1 - self.fallback_prob_ratio
             )  # S(t)= 1-P(t)
             tree_dict["values"] = conditional_St
             # store probability of survival until time t: S(t)
@@ -408,7 +408,7 @@ class SurvivalModelConverter:
 # from sksurv.ensemble import RandomSurvivalForest
 # from sksurv.tree import SurvivalTree
 
-# def SDT_to_dict_interval(clf_obj, idx, output_format, T_start=0, T_end=2, baseline_Pt=0):
+# def SDT_to_dict_interval(clf_obj, idx, output_format, t_start=0, t_end=2, fallback_prob_ratio=0):
 
 
 #     ''' Compatible with single output trees only, at the moment.
@@ -453,21 +453,21 @@ class SurvivalModelConverter:
 #         if tree_dict['unique_times_'] is None and output_format not in ['probability']:
 #             raise KeyError('Missing \'unique_times_\' in SurvivalTree-based ensemble.')
 
-#         if T_end is None and tree_dict['unique_times_'] is not None: # select median time to (any) event
-#             T_end = tree_dict['unique_times_'][len(tree_dict['unique_times_'])//2]
+#         if t_end is None and tree_dict['unique_times_'] is not None: # select median time to (any) event
+#             t_end = tree_dict['unique_times_'][len(tree_dict['unique_times_'])//2]
 
 
 #         if output_format in ["probability", "auto"]:
 #             # pick last "False" index before "True" appears
-#             index_start = np.argmax(tree_obj.unique_times_ > T_start)-1
-#             index_end = np.argmax(tree_obj.unique_times_ > T_end) -1
+#             index_start = np.argmax(tree_obj.unique_times_ > t_start)-1
+#             index_end = np.argmax(tree_obj.unique_times_ > t_end) -1
 
 #             # it DOES work when all unique_times_ are < T_bin, as it will again select 0-1= -1
 #             # it does not work when all times are > T_bin, as it selects -1 instead of 0
-#             if min(tree_obj.unique_times_) > T_start:
+#             if min(tree_obj.unique_times_) > t_start:
 #                 index_start = 0
-#             if min(tree_obj.unique_times_) > T_end:
-#                 raise ValueError(f'Value for T_end={T_end:.4f} is too small. Mus be greater than {tree_obj.unique_times_:.4f}')
+#             if min(tree_obj.unique_times_) > t_end:
+#                 raise ValueError(f'Value for t_end={t_end:.4f} is too small. Mus be greater than {tree_obj.unique_times_:.4f}')
 
 
 #             conditional_Pt = (1 - tree.value[:,index_end, 1] / tree.value[:,index_start, 1]).reshape(-1, 1)
@@ -475,10 +475,10 @@ class SurvivalModelConverter:
 #             # division by zero is possible if some S(t) are = 0 in index_start.
 #             # Leave SHAP values equal to NaN if that happens
 #             if np.isnan(conditional_Pt).sum() > 0:
-#                 conditional_Pt[np.isnan(conditional_Pt)] = baseline_Pt
+#                 conditional_Pt[np.isnan(conditional_Pt)] = fallback_prob_ratio
 #             #     # warning should be raised for individual instances
 #             #     # warnings.warn('NaN values were found when computing interval-specific SHAP values,\
-#             #     # possibly, the event is estimated to happen before the queried time interval [{T_start}-{T_end}]')
+#             #     # possibly, the event is estimated to happen before the queried time interval [{t_start}-{t_end}]')
 #             tree_dict["values"]  = conditional_Pt
 
 #         else:
@@ -577,24 +577,24 @@ def format_SHAP_values(shap_values, clf, X):
     return shap_values
 
 
-def predict_proba_at_T(clf, X, T_start=0, T_end=None):
+def predict_proba_at_T(clf, X, t_start=0, t_end=None):
 
-    assert T_start < T_end
+    assert t_start < t_end
 
-    if T_end is None:
+    if t_end is None:
         index_end = int(len(clf.unique_times_) // 2)
-        print("Analysing for T_end = ", clf.unique_times_[index_end])
+        print("Analysing for t_end = ", clf.unique_times_[index_end])
 
     # to idenitify corresponding index, pick last "False" index before "True" appears
-    index_start = np.argmax(clf.unique_times_ > T_start) - 1
-    index_end = np.argmax(clf.unique_times_ > T_end) - 1
+    index_start = np.argmax(clf.unique_times_ > t_start) - 1
+    index_end = np.argmax(clf.unique_times_ > t_end) - 1
 
     # it does not work when all times are > T_bin, as it selects -1 instead of 0
-    if min(clf.unique_times_) > T_start:
+    if min(clf.unique_times_) > t_start:
         index_start = 0
-    if min(clf.unique_times_) > T_end:
+    if min(clf.unique_times_) > t_end:
         raise ValueError(
-            f"Value for T_end {T_end} is too small. Mus be greater than {clf.unique_times_}"
+            f"Value for t_end {t_end} is too small. Mus be greater than {clf.unique_times_}"
         )
 
     y_surv = clf.predict_survival_function(X, return_array=True).astype(np.float32)
