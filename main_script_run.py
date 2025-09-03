@@ -106,10 +106,8 @@ if __name__ == "__main__":
     plt.title("Survival function $S(t)$", fontsize=FONTSIZE + 2)
     # plt.plot(unique_times, y_surv)
     plt.plot(unique_times, y_surv_smooth, lw=2)
-    plt.plot(unique_times, y_surv_smooth, lw=2)
     plt.xlabel("time $t$", fontsize=FONTSIZE)
     plt.xlim(0, max(unique_times)*1.02)
-    plt.xlim(0, max(unique_times) * 1.02)
     plt.ylabel("$S(t)$", fontsize=FONTSIZE)
     plt.ylim(0, 1.05)
     plt.savefig(os.path.join(root_folder, fig_folder, "survival-curve-example.pdf"))
@@ -119,10 +117,8 @@ if __name__ == "__main__":
     plt.title(r"Cum. Hazard function $\Lambda(t)$", fontsize=FONTSIZE + 2)
     # plt.plot(unique_times, y_hazard)
     plt.plot(unique_times, y_hazard_smooth, lw=2)
-    plt.plot(unique_times, y_hazard_smooth, lw=2)
     plt.xlabel("time $t$", fontsize=FONTSIZE)
     plt.xlim(0, max(unique_times)*1.02)
-    plt.xlim(0, max(unique_times) * 1.02)
     plt.ylabel(r"$\Lambda(t)$", fontsize=FONTSIZE)
     plt.savefig(os.path.join(root_folder, fig_folder, "cum-hazard-curve-example.pdf"))
     plt.show()
@@ -131,13 +127,8 @@ if __name__ == "__main__":
     plt.title(r"Hazard function $\lambda(t)$", fontsize=FONTSIZE + 2)
     # plt.plot(unique_times, dy_hazard)
     plt.plot(unique_times, 100 * dy_hazard_smooth, lw=2)
-    plt.axhline(
-        0, color="gray", linestyle="--", linewidth=1, zorder=0
-    )  # thin line at y=0
-    plt.plot(unique_times, 100 * dy_hazard_smooth, lw=2)
     plt.axhline(0, color="gray", linestyle="--", linewidth=1, zorder=0)  # thin line at y=0
     plt.xlabel("time $t$", fontsize=FONTSIZE)
-    plt.xlim(0, max(unique_times)*1.02)
     plt.xlim(0, max(unique_times) * 1.02)
     plt.ylabel(r"$100\:\lambda(t)$", fontsize=FONTSIZE)
     plt.savefig(os.path.join(root_folder, fig_folder, "hazard-curve-example.pdf"))
