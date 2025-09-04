@@ -27,7 +27,7 @@ from utilities import auto_rename_fields
 from utilities import format_timedelta, format_SHAP_values
 
 DPI_RES = 180
-DRAFT_RUN = True
+DRAFT_RUN = False
 
 
 if __name__ == "__main__":
@@ -56,16 +56,9 @@ if __name__ == "__main__":
         X = X[:500]
         y = y[:500]
 
-    # Set location for storing result figures and plots
-    fig_folder = "draft-figures" if DRAFT_RUN else "figures"
-    # Default location for storing result figures and plots
-    general_figs_folder = os.path.join(root_folder, "figures")
-    interval_figs_folder = os.path.join(root_folder, "figures", "interval-plots")
-
     # choose whether to store in `draft-figures` folder (in .gitignore)
     # or in the normal `figures` folder
     fig_folder = "draft-figures" if DRAFT_RUN else "figures"  # pylint: disable=invalid-name
-
     general_figs_folder = os.path.join(root_folder, fig_folder)
     interval_figs_folder = os.path.join(root_folder, fig_folder, "interval-plots")
 
@@ -107,7 +100,6 @@ if __name__ == "__main__":
 
     plt.figure()
     plt.title("Survival function $S(t)$", fontsize=FONTSIZE + 2)
-    # plt.plot(unique_times, y_surv)
     plt.plot(unique_times, y_surv_smooth, lw=2)
     plt.xlabel("time $t$", fontsize=FONTSIZE)
     plt.xlim(0, max(unique_times)*1.02)
@@ -121,7 +113,6 @@ if __name__ == "__main__":
 
     plt.figure()
     plt.title(r"Cum. Hazard function $\Lambda(t)$", fontsize=FONTSIZE + 2)
-    # plt.plot(unique_times, y_hazard)
     plt.plot(unique_times, y_hazard_smooth, lw=2)
     plt.xlabel("time $t$", fontsize=FONTSIZE)
     plt.xlim(0, max(unique_times)*1.02)
@@ -134,7 +125,6 @@ if __name__ == "__main__":
 
     plt.figure()
     plt.title(r"Hazard function $\lambda(t)$", fontsize=FONTSIZE + 2)
-    # plt.plot(unique_times, dy_hazard)
     plt.plot(unique_times, 100 * dy_hazard_smooth, lw=2)
     plt.axhline(0, color="gray", linestyle="--", linewidth=1, zorder=0)  # thin line at y=0
     plt.xlabel("time $t$", fontsize=FONTSIZE)
@@ -190,7 +180,7 @@ if __name__ == "__main__":
     # split timeline in intervals and explain each segment
     time_intervals = [0, 1250, 2500, 4000, 5200]  # longer version
     # ^ nice plots, but a bit too many. Shorter version below:
-    time_intervals = [0, 1800, 3600, 5100]
+    time_intervals = [0, 1825, 3600, 5100]
 
     # Store interval shap values as dictionary here (intervals as keys):
     interval_shap_values = {}
@@ -201,7 +191,7 @@ if __name__ == "__main__":
         t_start = time_intervals[t_i]
         t_end = time_intervals[t_i + 1]
 
-        print(f"Computing SHAP values for interval: ({t_start}, {t_end}] ...")
+        print(f"Computing SHAP values for interval: [{t_start}, {t_end}) ...")
 
         convert_interv = SurvivalModelConverter(clf_obj=clf, t_start=t_start, t_end=t_end)
 
@@ -243,7 +233,7 @@ if __name__ == "__main__":
         """ survival plot here, dump as .mpl file"""
 
         plt.figure()  # figsize will be overwritten after reloading,
-        plt.suptitle("Predicted survival curve", size=round(8 * (DPI_RES / 72)), y=0.98)
+        plt.suptitle("Predicted survival curve", size=round(7 * (DPI_RES / 72)), y=0.98)
         plt.step(
             y_pred_i.index,
             y_pred_i.values,
@@ -338,7 +328,7 @@ if __name__ == "__main__":
             ax = shap.plots.waterfall(shap_values_use, max_display=10, show=False)
             ax.set_title(
                 f"Output explanation, interval [{key})   ",
-                fontsize=round(8 * (DPI_RES / 72)),
+                fontsize=round(7 * (DPI_RES / 72)),
             )
 
             fig.savefig(
@@ -391,7 +381,7 @@ if __name__ == "__main__":
 
         y_pad = 10  # needed not to cut off the survival curve plot title
         y_pad_intrarow = 100  # padding between top row and bottom row
-        x_pad_intrarow = -70 if len(images) > 2 else 0
+        x_pad_intrarow = -20 if len(images) > 2 else 0
 
         combo_height = max(heights) + surv_image.size[1] + y_pad + y_pad_intrarow
         combo_width = sum(widths) + x_pad_intrarow * (len(widths) - 1)  # N-1 gaps
