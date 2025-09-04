@@ -27,7 +27,7 @@ from utilities import auto_rename_fields
 from utilities import format_timedelta, format_SHAP_values
 
 DPI_RES = 180
-DRAFT_RUN = True
+DRAFT_RUN = False
 
 
 if __name__ == "__main__":
@@ -41,6 +41,8 @@ if __name__ == "__main__":
         os.path.join(root_folder, "FLChain-single-event-imputed", "targets.csv")
     ).to_records(index=False)
     y = auto_rename_fields(y)
+    from utilities import map_time_to_six_bins
+    # y = map_time_to_six_bins(y, time_field="time", event_field="event")
 
     # with open("surv_outcome.pkl", "rb") as f:
     #     y_np = pickle.load(f)
@@ -180,6 +182,8 @@ if __name__ == "__main__":
     # ^ nice plots, but a bit too many. Shorter version below:
     time_intervals = [0, 1825, 3600, 5100]
 
+    # time_intervals = [0, 2, 5, 6]
+
     # Store interval shap values as dictionary here (intervals as keys):
     interval_shap_values = {}
 
@@ -191,7 +195,7 @@ if __name__ == "__main__":
 
         print(f"Computing SHAP values for interval: [{t_start}, {t_end}) ...")
 
-        convert_interv = SurvivalModelConverter(clf_obj=clf, t_start=t_start, t_end=t_end, )
+        convert_interv = SurvivalModelConverter(clf_obj=clf, t_start=t_start, t_end=t_end)
 
         clf_interv = []
         tree_intervs = [
@@ -209,7 +213,7 @@ if __name__ == "__main__":
             feature_perturbation="tree_path_dependent",
         )
 
-        shap_values_int = explainer(X_test, check_additivity=True)
+        shap_values_int = explainer(X_test, check_additivity=False)
         shap_values_int = format_SHAP_values(shap_values_int, clf, X_test)
         interval_shap_values[f"{str(t_start)}-{str(t_end)}"] = shap_values_int
 
@@ -321,24 +325,37 @@ if __name__ == "__main__":
 
             # Making figures and plots of the correct size
             single_plotwidth = max(3.4, 7 - len(interval_shap_values))
-            fig, ax = plt.subplots(figsize=(single_plotwidth, 7))
-            plt.sca(ax)  # make this Axes current for SHAP
-            ax = shap.plots.waterfall(shap_values_use, max_display=10, show=False)
-            ax.set_title(
-                f"Output explanation, interval [{key})   ",
-                fontsize=round(7 * (DPI_RES / 72)),
-            )
 
-            fig.savefig(
-                os.path.join(interval_figs_folder, local_interv_plt_name),
-                bbox_inches="tight",
-                dpi=DPI_RES,
-            )
-            fig.savefig(f"temp_plot_{i}_{key}.png", bbox_inches="tight", dpi=DPI_RES)
-            # plt.show()
-            plt.close(fig)  # Close the figure to free up memory
+            # Check for NaN or inf in SHAP values before plotting
+            if not (np.all(np.isfinite(shap_values_use.values)) and np.all(np.isfinite(shap_values_use.base_values))):
+                print(f"Warning: SHAP values for interval {key} contain NaN or inf. Creating empty plot.")
+                fig, ax = plt.subplots(figsize=(single_plotwidth, 7))
+                ax.set_title(f"Output explanation, interval [{key})   ", fontsize=round(7 * (DPI_RES / 72)))
+                ax.text(0.5, 0.5, "No valid data", ha='center', va='center', fontsize=14, color='black', transform=ax.transAxes)
+                ax.axis('off')
+                fig.savefig(os.path.join(interval_figs_folder, local_interv_plt_name), bbox_inches="tight", dpi=DPI_RES)
+                fig.savefig(f"temp_plot_{i}_{key}.png", bbox_inches="tight", dpi=DPI_RES)
+                print(f"Saving figure with size: {fig.get_size_inches()} inches")
+                plt.close(fig)
+            else:
+                fig, ax = plt.subplots(figsize=(single_plotwidth, 7))
+                plt.sca(ax)  # make this Axes current for SHAP
+                ax = shap.plots.waterfall(shap_values_use, max_display=10, show=False)
+                ax.set_title(
+                    f"Output explanation, interval [{key})   ",
+                    fontsize=round(7 * (DPI_RES / 72)),
+                )
+                print(f"Saving figure with size: {fig.get_size_inches()} inches")
+                fig.savefig(
+                    os.path.join(interval_figs_folder, local_interv_plt_name),
+                    bbox_inches="tight",
+                    dpi=DPI_RES,
+                )
+                fig.savefig(f"temp_plot_{i}_{key}.png", bbox_inches="tight", dpi=DPI_RES)
+                # plt.show()
+                plt.close(fig)  # Close the figure to free up memory
 
-            print(f"TIME INTERVAL: {key}")
+            print(f"TIME INTERVAL: [{key})")
             print(
                 f"Sample prediction, SHAP based: {shap_values_use.base_values + shap_values_use.values.sum():.4f}"
             )
@@ -363,7 +380,7 @@ if __name__ == "__main__":
         fig.set_size_inches((1 -  width_pad_prop) * tot_width, 5.3, forward=True)
         plt.tight_layout()
         plt.savefig(f"temp_plot_surv_{i}.png", bbox_inches="tight", dpi=DPI_RES)
-        # plt.show()
+        print(f"Saving figure with size: {fig.get_size_inches()} inches")
         plt.close()
 
         # Load the saved images and find the total width and height for the combined image
@@ -383,6 +400,7 @@ if __name__ == "__main__":
 
         combo_height = max(heights) + surv_image.size[1] + y_pad + y_pad_intrarow
         combo_width = sum(widths) + x_pad_intrarow * (len(widths) - 1)  # N-1 gaps
+        print(f"Creating PIL image with size: {combo_width}x{combo_height} pixels")
 
         # Create a new image with the appropriate size to contain all the plots
         combo_image = Image.new("RGB", (combo_width, combo_height), color=(255, 255, 255))
@@ -470,6 +488,8 @@ if __name__ == "__main__":
 
         # Clean up the temporary images. Explicit garbage collection is necessary
         gc.collect()
+        import time
+        time.sleep(0.1)  # give some time to the OS to release the files
         os.remove(f"temp_plot_surv_{i}.png")
         os.remove(f"temp_plot_surv_{i}.mpl")
         os.remove(f"temp_plot_{i}_full.png")

@@ -113,7 +113,12 @@ def predict_hazard_function(clf, X, event_times="auto", smooth=False):
 
     dy = np.diff(y_hazards, axis=1, prepend=0)
     dx = dx.reshape(1, -1)
-    df = dy / dx
+    with np.errstate(divide='ignore', invalid='ignore'):
+        df = dy / dx
+        # in case of 0/0 -> NaN, set these to 1
+        zero_mask = (dy == 0) & (dx == 0)
+        df[zero_mask] = 1
+        # inf/anything or anything/0 (except 0/0) -> inf, leave as is
 
     return df
 
@@ -288,9 +293,8 @@ class SurvivalModelConverter:
         # Compute indices for self.t_start and self.t_end in `unique_times_`
         # identifies the last element of (sorted array) unique_times_ such that
         # element_start <= t_start and element_end < t_end. Remember argmax returns the FIRST maximum arg
-        # TODO busy right here:
-        index_start = np.argmax(tree_obj.unique_times_ > self.t_start) - 1
-        index_end = np.argmax(tree_obj.unique_times_ > self.t_end) - 1
+        index_start = np.argmax(tree_obj.unique_times_ >= self.t_start) - 1
+        index_end = np.argmax(tree_obj.unique_times_ >= self.t_end) - 1
         # This leaves out some edge cases, treated here below:
         # if self.t_start is smaller than all `unique_times_`
         if tree_obj.unique_times_[0] > self.t_start:
@@ -440,15 +444,16 @@ def format_SHAP_values(shap_values, clf, X):
 
 def predict_proba_at_T(clf, X, t_start=0, t_end=None):
 
-    assert t_start < t_end
-
     if t_end is None:
         index_end = int(len(clf.unique_times_) // 2)
         print("Analysing for t_end = ", clf.unique_times_[index_end])
+    else:
+        assert t_start < t_end
+
 
     # to idenitify corresponding index, pick last "False" index before "True" appears
-    index_start = np.argmax(clf.unique_times_ > t_start) - 1
-    index_end = np.argmax(clf.unique_times_ > t_end) - 1
+    index_start = np.argmax(clf.unique_times_ >= t_start) - 1
+    index_end = np.argmax(clf.unique_times_ >= t_end) - 1
 
     # it does not work when all times are > T_bin, as it selects -1 instead of 0
     if min(clf.unique_times_) > t_start:
@@ -486,6 +491,21 @@ def format_timedelta(td, time_format):
         raise ValueError(error_message)
 
 
-# if __name__ == '__main__':
+def map_time_to_six_bins(recarray, time_field="time", event_field="event"):
+    """
+    Map the `time_field` in a record array into 6 ordinal bins (1–6)
+    based on quantiles, while keeping the `event_field` untouched.
+    """
+    times = recarray[time_field]
 
-#     print('hello!')
+    # compute the bin edges (0..1 quantiles in 1/6th increments)
+    quantiles = np.quantile(times, np.linspace(0, 1, 7))
+
+    # digitize times into bins [1..6]
+    bins = np.digitize(times, quantiles[1:-1], right=True) + 1
+
+    # build new recarray with same dtype
+    mapped = recarray.copy()
+    mapped[time_field] = bins
+
+    return mapped
