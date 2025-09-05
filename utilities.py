@@ -16,36 +16,6 @@ from sksurv.ensemble import GradientBoostingSurvivalAnalysis, RandomSurvivalFore
 from sksurv.metrics import concordance_index_censored as c_index
 
 
-def get_temp_plot_path(root_path, original_path, idx=None, interval_key=None):
-    """
-    Maps the original savefig path to its corresponding temp file in the root path.
-    - original_path: The original file path (relative or absolute).
-    - idx: The sample index (int), if applicable.
-    - interval_key: The interval key (str), e.g., '0-1825', if applicable.
-
-    Returns the temp file path as a string.
-    """
-
-    # Extract the filename without extension
-    base = os.path.basename(original_path)
-    name, ext = os.path.splitext(base)
-
-    # Map known patterns to temp file names
-    # Survival curve: figures/survival-curves/survival_curve_idx{i}.png
-    if name.startswith("survival_curve_idx") and idx is not None:
-        temp_name = f"temp_plot_surv_{idx}.png"
-    # Interval SHAP: figures/interval-plots/Local_SHAP_idx{i}_T{key}.pdf
-    elif name.startswith("Local_SHAP_idx") and interval_key is not None:
-        temp_name = f"temp_plot_{idx}_{interval_key}.png"
-    # Full SHAP: figures/local-SHAP/Local_SHAP_idx{i}.pdf
-    elif name.startswith("Local_SHAP_idx"):
-        temp_name = f"temp_plot_{idx}_full.png"
-    else:
-        # Fallback: use the original name, but prepend temp_plot_
-        temp_name = f"temp_plot_{name}.png"
-
-    return os.path.join(root_path, temp_name)
-
 
 def save_placeholder_plot(os_plot_path_and_name, dpi_res):
     fig, ax = plt.subplots(figsize=(5, 5))
