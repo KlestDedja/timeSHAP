@@ -6,6 +6,7 @@ Created on Thu Feb 15 16:45:47 2024
 @institution:  KU Leuven
 """
 
+import os
 import warnings
 import numpy as np
 import pandas as pd
@@ -13,6 +14,47 @@ import matplotlib.pyplot as plt
 from sksurv.tree import SurvivalTree
 from sksurv.ensemble import GradientBoostingSurvivalAnalysis, RandomSurvivalForest
 from sksurv.metrics import concordance_index_censored as c_index
+
+
+def get_temp_plot_path(root_path, original_path, idx=None, interval_key=None):
+    """
+    Maps the original savefig path to its corresponding temp file in the root path.
+    - original_path: The original file path (relative or absolute).
+    - idx: The sample index (int), if applicable.
+    - interval_key: The interval key (str), e.g., '0-1825', if applicable.
+
+    Returns the temp file path as a string.
+    """
+
+    # Extract the filename without extension
+    base = os.path.basename(original_path)
+    name, ext = os.path.splitext(base)
+
+    # Map known patterns to temp file names
+    # Survival curve: figures/survival-curves/survival_curve_idx{i}.png
+    if name.startswith("survival_curve_idx") and idx is not None:
+        temp_name = f"temp_plot_surv_{idx}.png"
+    # Interval SHAP: figures/interval-plots/Local_SHAP_idx{i}_T{key}.pdf
+    elif name.startswith("Local_SHAP_idx") and interval_key is not None:
+        temp_name = f"temp_plot_{idx}_{interval_key}.png"
+    # Full SHAP: figures/local-SHAP/Local_SHAP_idx{i}.pdf
+    elif name.startswith("Local_SHAP_idx"):
+        temp_name = f"temp_plot_{idx}_full.png"
+    else:
+        # Fallback: use the original name, but prepend temp_plot_
+        temp_name = f"temp_plot_{name}.png"
+
+    return os.path.join(root_path, temp_name)
+
+
+def save_placeholder_plot(os_plot_path_and_name, dpi_res):
+    fig, ax = plt.subplots(figsize=(5, 5))
+    ax.set_title("Output explanation, full interval", fontsize=round(7 * (dpi_res / 72)))
+    ax.text(0.5, 0.5, "No valid data", ha='center', va='center', fontsize=14, color='black', transform=ax.transAxes)
+    ax.axis('off')
+    fig.savefig(os_plot_path_and_name, bbox_inches="tight", dpi=dpi_res)
+    plt.close(fig)
+
 
 
 def adjust_tick_label_size(xfontsize=None, yfontsize=None):
@@ -121,18 +163,6 @@ def predict_hazard_function(clf, X, event_times="auto", smooth=False):
         # inf/anything or anything/0 (except 0/0) -> inf, leave as is
 
     return df
-
-
-# def take_derivative(y_original, dx, axis=1,):
-#     # y_hazards = clf.predict_cumulative_hazard_function(X, return_array=True)
-#     dy = np.diff(y_original, axis=axis, prepend=0)
-#     dx = dx.reshape(1, -1)
-#     df = dy/dx
-
-#     return df
-
-
-# from scipy.stats import gaussian_kde
 
 
 def rolling_kernel(curve, kernel_size=10):

@@ -9,7 +9,6 @@ import os
 import pickle
 import warnings
 from datetime import datetime
-import gc
 import numpy as np
 import pandas as pd
 import shap
@@ -25,9 +24,10 @@ from sksurv.metrics import concordance_index_censored as c_index
 from utilities import SurvivalModelConverter, predict_hazard_function
 from utilities import auto_rename_fields
 from utilities import format_timedelta, format_SHAP_values
+from utilities import save_placeholder_plot
 
 DPI_RES = 180
-DRAFT_RUN = False
+DRAFT_RUN = True
 
 
 if __name__ == "__main__":
@@ -182,6 +182,9 @@ if __name__ == "__main__":
     # ^ nice plots, but a bit too many. Shorter version below:
     time_intervals = [0, 1825, 3600, 5100]
 
+    time_intervals = [0, 1825, 5100]
+
+
     # time_intervals = [0, 2, 5, 6]
 
     # Store interval shap values as dictionary here (intervals as keys):
@@ -232,9 +235,10 @@ if __name__ == "__main__":
 
         y_pred_i = y_pred_surv.iloc[i, :]  # sample from TEST (unseen) data
 
-        """ survival plot here, dump as .mpl file"""
+        """ survival plot here"""
 
-        plt.figure()  # figsize will be overwritten after reloading,
+        surv_curv_figsize = (8, 5) if len(time_intervals) > 3 else (6, 5)
+        plt.figure(figsize=surv_curv_figsize)
         plt.suptitle("Predicted survival curve", size=round(7 * (DPI_RES / 72)), y=0.98)
         plt.step(
             y_pred_i.index,
@@ -271,9 +275,6 @@ if __name__ == "__main__":
         plt.yticks(np.arange(0.2, 1.15, 0.2), None, fontsize=round(7 * (DPI_RES / 72)))
         plt.yticks(np.arange(0.1, 1, 0.2), None, minor=True)
         plt.legend(fontsize=round(6 * (DPI_RES / 72)))  # loc='auto' or 'upper right'
-        with open(f"temp_plot_surv_{i}.mpl", "wb") as file:
-            pickle.dump(plt.gcf(), file)
-        plt.legend(fontsize=round(6 * (DPI_RES / 72)))  # loc='auto' or 'upper right'
         plt.savefig(
             os.path.join(general_figs_folder, "survival-curves", f"survival_curve_idx{i}.png"),
             bbox_inches="tight",
@@ -282,18 +283,37 @@ if __name__ == "__main__":
         plt.close()
 
         """ local SHAP plot here: computed over entire interval """
-        local_plt_name = f"Local_SHAP_idx{i}.pdf"
+        local_plt_name_pdf = f"Local_SHAP_idx{i}.pdf"
+        local_plt_name_png = f"Local_SHAP_idx{i}.png"
 
-        fig, ax = plt.subplots(figsize=(5, 5))
-        plt.sca(ax)  # make this Axes current for SHAP
-        ax = shap.plots.waterfall(shap_values[i], max_display=10, show=False)
-        ax.set_title("Output explanation, full interval", fontsize=round(7 * (DPI_RES / 72)))
-        fig.savefig(
-            os.path.join(general_figs_folder, "local-SHAP", local_plt_name),
-            bbox_inches="tight",
-        )
-        fig.savefig(f"temp_plot_{i}_full.png", bbox_inches="tight", dpi=DPI_RES)
-        plt.close(fig)  # Close the figure to free up memory
+        # Robust check for SHAP values: any non-finite value raises an exception:
+        shap_vals = shap_values[i].values
+        shap_base = shap_values[i].base_values
+        if (not np.any(np.isfinite(shap_vals))) or (not np.isfinite(shap_base)):
+            print(f"Warning: SHAP values for full interval are all NaN or inf. Creating empty plot.")
+            save_placeholder_plot(pdf_path, dpi_res=DPI_RES)
+        else:
+            fig, ax = plt.subplots(figsize=(5, 5))
+            plt.sca(ax)  # make this Axes current for SHAP
+            ax = shap.plots.waterfall(shap_values[i], max_display=10, show=False)
+            ax.set_title("Output explanation, full interval", fontsize=round(7 * (DPI_RES / 72)))
+            fig.savefig(
+                os.path.join(general_figs_folder, "local-SHAP", local_plt_name_pdf),
+                bbox_inches="tight",
+                dpi=DPI_RES,
+            )
+            fig.savefig(
+                os.path.join(general_figs_folder, "local-SHAP", local_plt_name_png),
+                bbox_inches="tight",
+                dpi=DPI_RES,
+            )
+            plt.close(fig)  # Close the figure to free up memory
+            # Check file size after saving
+            pdf_path = os.path.join(general_figs_folder, "local-SHAP", local_plt_name_pdf)
+            if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 5 * 1024 * 1024: # > 5 MB
+                print("Warning: (full interval) SHAP waterfall plot file is too large. Creating empty plot.")
+                os.remove(pdf_path)
+                save_placeholder_plot(pdf_path, dpi_res=DPI_RES)
 
         """
         given local instance, iterate through time intervals
@@ -305,7 +325,8 @@ if __name__ == "__main__":
             t_start, t_end = [float(s) for s in key.split("-")]
             index_t_end = np.argmax(unique_times > t_end) - 1
 
-            local_interv_plt_name = f"Local_SHAP_idx{i}_T{key}.pdf"
+            local_interv_plt_name_pdf = f"Local_SHAP_idx{i}_T{key}.pdf"
+            local_interv_plt_name_png = f"Local_SHAP_idx{i}_T{key}.png"
             combo_local_plt_name_pdf = f"Time-SHAP_idx{i}_combined.pdf"
             combo_local_plt_name_png = f"Time-SHAP_idx{i}_combined.png"
 
@@ -333,11 +354,11 @@ if __name__ == "__main__":
                 ax.set_title(f"Output explanation, interval [{key})   ", fontsize=round(7 * (DPI_RES / 72)))
                 ax.text(0.5, 0.5, "No valid data", ha='center', va='center', fontsize=14, color='black', transform=ax.transAxes)
                 ax.axis('off')
-                fig.savefig(os.path.join(interval_figs_folder, local_interv_plt_name), bbox_inches="tight", dpi=DPI_RES)
-                fig.savefig(f"temp_plot_{i}_{key}.png", bbox_inches="tight", dpi=DPI_RES)
+                fig.savefig(os.path.join(interval_figs_folder, local_interv_plt_name_png), bbox_inches="tight", dpi=DPI_RES)
+                fig.savefig(os.path.join(interval_figs_folder, local_interv_plt_name_pdf), bbox_inches="tight", dpi=DPI_RES)
                 print(f"Saving figure with size: {fig.get_size_inches()} inches")
                 plt.close(fig)
-            else:
+            else: # NaN values found, saving png file only ( no PDF file)
                 fig, ax = plt.subplots(figsize=(single_plotwidth, 7))
                 plt.sca(ax)  # make this Axes current for SHAP
                 ax = shap.plots.waterfall(shap_values_use, max_display=10, show=False)
@@ -347,11 +368,10 @@ if __name__ == "__main__":
                 )
                 print(f"Saving figure with size: {fig.get_size_inches()} inches")
                 fig.savefig(
-                    os.path.join(interval_figs_folder, local_interv_plt_name),
+                    os.path.join(interval_figs_folder, local_interv_plt_name_png),
                     bbox_inches="tight",
                     dpi=DPI_RES,
                 )
-                fig.savefig(f"temp_plot_{i}_{key}.png", bbox_inches="tight", dpi=DPI_RES)
                 # plt.show()
                 plt.close(fig)  # Close the figure to free up memory
 
@@ -370,26 +390,16 @@ if __name__ == "__main__":
 
         # Here manipulate and paste the images one next to each other
 
-        with open(f"temp_plot_surv_{i}.mpl", "rb") as file:
-            fig = pickle.load(file)
-
-        # Update the figure size
-        # fit survival plot and local SHAP plot over the entire interval
-        width_pad_prop = 0.03
-        tot_width = single_plotwidth * (len(interval_shap_values) - 1)
-        fig.set_size_inches((1 -  width_pad_prop) * tot_width, 5.3, forward=True)
-        plt.tight_layout()
-        plt.savefig(f"temp_plot_surv_{i}.png", bbox_inches="tight", dpi=DPI_RES)
-        print(f"Saving figure with size: {fig.get_size_inches()} inches")
-        plt.close()
-
-        # Load the saved images and find the total width and height for the combined image
-        surv_image = Image.open(f"temp_plot_surv_{i}.png")
-        local_image = Image.open(f"temp_plot_{i}_full.png")
-        images = [
-            Image.open(f"temp_plot_{i}_{key}.png") for key, val in interval_shap_values.items()
+        # Use original plot files (must be PNG for PIL compatibility)
+        surv_path = os.path.join(general_figs_folder, "survival-curves", f"survival_curve_idx{i}.png")
+        local_path = os.path.join(general_figs_folder, "local-SHAP", f"Local_SHAP_idx{i}.png")
+        interval_paths = [
+            os.path.join(interval_figs_folder, f"Local_SHAP_idx{i}_T{key}.png") for key in interval_shap_values.keys()
         ]
-        # images = [img.rotate(270, expand=True) for img in images]
+
+        surv_image = Image.open(surv_path)
+        local_image = Image.open(local_path)
+        images = [Image.open(p) for p in interval_paths]
 
         # collect widths and heights, magnitude is pixel-wise, not in inches as in mpl
         widths, heights = zip(*(i.size for i in images))
@@ -487,17 +497,12 @@ if __name__ == "__main__":
         # display(combo_image)
 
         # Clean up the temporary images. Explicit garbage collection is necessary
-        gc.collect()
-        import time
-        time.sleep(0.1)  # give some time to the OS to release the files
-        os.remove(f"temp_plot_surv_{i}.png")
-        os.remove(f"temp_plot_surv_{i}.mpl")
-        os.remove(f"temp_plot_{i}_full.png")
+        # import gc
+        # gc.collect()
+        # for i in range(N):
+        #     os.remove(f"temp_plot_surv_{i}.mpl")
 
         # TODO: improve management of intervals and keys (tuples vs strings)
-
-        for key, value in interval_shap_values.items():
-            os.remove(f"temp_plot_{i}_{key}.png")
 
         t1_local_explains = datetime.now()
         time_local_explains = format_timedelta(t1_local_explains - t0_local_explains, "mm:ss:ms")
