@@ -24,10 +24,10 @@ from sksurv.metrics import concordance_index_censored as c_index
 from utilities import SurvivalModelConverter, predict_hazard_function
 from utilities import auto_rename_fields
 from utilities import format_timedelta, format_SHAP_values
-from utilities import save_placeholder_plot
+from utilities import save_placeholder_plot, compute_x_positions
 
 DPI_RES = 180
-DRAFT_RUN = True
+DRAFT_RUN = False
 
 
 if __name__ == "__main__":
@@ -181,15 +181,12 @@ if __name__ == "__main__":
     time_intervals = [0, 1250, 2500, 4000, 5200]  # longer version
     # ^ nice plots, but a bit too many. Shorter version below:
     time_intervals = [0, 1825, 3600, 5100]
-
-    time_intervals = [0, 1825, 5100]
-
+    # time_intervals = [0, 1825, 5100]
 
     # time_intervals = [0, 2, 5, 6]
 
     # Store interval shap values as dictionary here (intervals as keys):
     interval_shap_values = {}
-
 
     for i, t_i in enumerate(range(len(time_intervals) - 1)):
 
@@ -237,7 +234,15 @@ if __name__ == "__main__":
 
         """ survival plot here"""
 
-        surv_curv_figsize = (8, 5) if len(time_intervals) > 3 else (6, 5)
+        if len(time_intervals) == 1:
+            raise ValueError("At least two time intervals are required for timeSHAP.")
+        if len(time_intervals) == 2:
+            surv_curv_figsize = (6, 5.5)
+        elif len(time_intervals) == 3:
+            surv_curv_figsize = (8, 5.5)
+        else:
+            surv_curv_figsize = (9, 5.5)
+
         plt.figure(figsize=surv_curv_figsize)
         plt.suptitle("Predicted survival curve", size=round(7 * (DPI_RES / 72)), y=0.98)
         plt.step(
@@ -289,9 +294,11 @@ if __name__ == "__main__":
         # Robust check for SHAP values: any non-finite value raises an exception:
         shap_vals = shap_values[i].values
         shap_base = shap_values[i].base_values
-        if (not np.any(np.isfinite(shap_vals))) or (not np.isfinite(shap_base)):
-            print(f"Warning: SHAP values for full interval are all NaN or inf. Creating empty plot.")
-            save_placeholder_plot(pdf_path, dpi_res=DPI_RES)
+        png_path = os.path.join(general_figs_folder, "local-SHAP", local_plt_name_png)
+
+        if (not np.any(np.isfinite(shap_vals))) or (not np.isfinite(shap_base) or np.unique(shap_vals).size < 2):
+            print(f"Warning: SHAP values either all equal, or are all NaN or inf. Creating empty plot.")
+            save_placeholder_plot(png_path, dpi_res=DPI_RES)
         else:
             fig, ax = plt.subplots(figsize=(5, 5))
             plt.sca(ax)  # make this Axes current for SHAP
@@ -309,11 +316,10 @@ if __name__ == "__main__":
             )
             plt.close(fig)  # Close the figure to free up memory
             # Check file size after saving
-            pdf_path = os.path.join(general_figs_folder, "local-SHAP", local_plt_name_pdf)
-            if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 5 * 1024 * 1024: # > 5 MB
+            if os.path.exists(png_path) and os.path.getsize(png_path) > 5 * 1024 * 1024: # > 5 MB
                 print("Warning: (full interval) SHAP waterfall plot file is too large. Creating empty plot.")
-                os.remove(pdf_path)
-                save_placeholder_plot(pdf_path, dpi_res=DPI_RES)
+                os.remove(png_path)
+                save_placeholder_plot(png_path, dpi_res=DPI_RES)
 
         """
         given local instance, iterate through time intervals
@@ -392,7 +398,7 @@ if __name__ == "__main__":
 
         # Use original plot files (must be PNG for PIL compatibility)
         surv_path = os.path.join(general_figs_folder, "survival-curves", f"survival_curve_idx{i}.png")
-        local_path = os.path.join(general_figs_folder, "local-SHAP", f"Local_SHAP_idx{i}.png")
+        local_path = os.path.join(general_figs_folder, "local-SHAP", local_plt_name_png)
         interval_paths = [
             os.path.join(interval_figs_folder, f"Local_SHAP_idx{i}_T{key}.png") for key in interval_shap_values.keys()
         ]
@@ -403,46 +409,55 @@ if __name__ == "__main__":
 
         # collect widths and heights, magnitude is pixel-wise, not in inches as in mpl
         widths, heights = zip(*(i.size for i in images))
+        n_bottom_imgs = len(widths)
 
-        y_pad = 10  # needed not to cut off the survival curve plot title
+        y_pad_top = 10  # needed not to cut off the survival curve plot title
         y_pad_intrarow = 100  # padding between top row and bottom row
-        x_pad_intrarow = -20 if len(images) > 2 else 0
+        x_pad_intrarow = -20 if n_bottom_imgs >= 3 else 0
 
-        combo_height = max(heights) + surv_image.size[1] + y_pad + y_pad_intrarow
-        combo_width = sum(widths) + x_pad_intrarow * (len(widths) - 1)  # N-1 gaps
+        surv_w, surv_h = surv_image.size
+        local_w, local_h = local_image.size
+
+        # Bottom-row and top-row required width
+        bottom_required_width = sum(widths) + x_pad_intrarow * (n_bottom_imgs - 1)
+        top_required_width = surv_w + local_w
+
+        # Combo width must fit both rows
+        combo_width = max(top_required_width, bottom_required_width)
+
+        bottom_row_heights = max(heights)
+        combo_height = max(surv_h, local_h) + y_pad_top + (y_pad_intrarow + bottom_row_heights)
+
         print(f"Creating PIL image with size: {combo_width}x{combo_height} pixels")
 
         # Create a new image with the appropriate size to contain all the plots
         combo_image = Image.new("RGB", (combo_width, combo_height), color=(255, 255, 255))
 
-        # Paste the matplotlib survival curve on top, add some padding on the x_axis
-        # bear in mind, the unit of measure is in pixels so the 2 vars must be integers
-        pos_left = (
-            (combo_width - surv_image.size[0] - local_image.size[0]) // 2 + x_pad_intrarow * len(widths) - x_pad_intrarow
-        )
-        pos_right = (
-            (combo_width + surv_image.size[0] - local_image.size[0]) // 2 - x_pad_intrarow * len(widths) + x_pad_intrarow
+        # top row placement via helper function: place top plots near the edges
+        #  when there are 2 bottom images, space them uniformly otherwise
+        pos_left, pos_right = compute_x_positions(
+            container_width=combo_width,
+            item_widths=[surv_w, local_w],
+            n_bottom_imgs=n_bottom_imgs,
         )
 
-        combo_image.paste(surv_image, (pos_left, y_pad))
+        # Paste the matplotlib survival curve on top, add some padding on the x-axis
+        combo_image.paste(surv_image, (pos_left, y_pad_top))
         # Paste the overall local SHAP next
-        combo_image.paste(local_image, (pos_right, y_pad))
+        combo_image.paste(local_image, (pos_right, y_pad_top))
 
-        # Paste each of the other images below the matplotlib image
+        # bottom row: iterate and paste with x_pad_intrarow as horizontal padding
         x_offset = 0
-        y_offset = (
-            surv_image.size[1] + y_pad + y_pad_intrarow
-        )  # Pasting below the survival curve image
+        y_offset = max(surv_h, local_h) + y_pad_top + y_pad_intrarow
         for img in images:
             combo_image.paste(img, (x_offset, y_offset))
-            x_offset += img.size[0]  # Update the x_offset by the width of the current image
-            x_offset += x_pad_intrarow  # And add the x padding
+            x_offset += img.size[0]
+            x_offset += x_pad_intrarow  # may be negative if you want overlap
 
         local_image.close()
         surv_image.close()
 
         # add title image on top of the current collage
-
         TITLE_SHAP_PLOT = "Time-SHAP explanation"  # for sample instance i={i}
         font_size = round(28 * (DPI_RES / 72))  # Adjust title size. Scale is relative to dpi=72
         font = ImageFont.truetype("arial.ttf", font_size)  # insert correct font path here
