@@ -19,12 +19,24 @@ from sksurv.metrics import concordance_index_censored as c_index
 def save_placeholder_plot(os_plot_path_and_name, dpi_res):
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.set_title("Output explanation, full interval", fontsize=round(7 * (dpi_res / 72)))
-    ax.text(0.5, 0.5, "No valid data", ha='center', va='center', fontsize=14, color='black', transform=ax.transAxes)
-    ax.axis('off')
+    ax.text(
+        0.5,
+        0.5,
+        "No valid data",
+        ha="center",
+        va="center",
+        fontsize=14,
+        color="black",
+        transform=ax.transAxes,
+    )
+    ax.axis("off")
     fig.savefig(os_plot_path_and_name, bbox_inches="tight", dpi=dpi_res)
     plt.close(fig)
 
-def compute_x_positions(container_width: int, item_widths: list[int], n_bottom_imgs: int) -> list[int]:
+
+def compute_x_positions(
+    container_width: int, item_widths: list[int], n_bottom_imgs: int
+) -> list[int]:
     """
     For n<3: put items at extremes (maximize middle space).
     For n>=3: equal gaps (>= min_gap when possible). Positions are ints.
@@ -52,7 +64,6 @@ def compute_x_positions(container_width: int, item_widths: list[int], n_bottom_i
     return xs
 
 
-
 def adjust_tick_label_size(xfontsize=None, yfontsize=None):
     """
     Adjusts the font size of the tick labels for both the x-axis and y-axis.
@@ -73,10 +84,7 @@ def rename_fields_dataframe(df):
     rename_map = {}
     for column in df.columns:
         # Detect binary column
-        if (
-            df[column].dropna().apply(float.is_integer).all()
-            and df[column].nunique() == 2
-        ):
+        if df[column].dropna().apply(float.is_integer).all() and df[column].nunique() == 2:
             rename_map[column] = "event"
         # Detect floating-point column
         elif df[column].dtype == float or df[column].dtype == np.float64:
@@ -129,7 +137,7 @@ def concordance_index_scorer(estimator, X, y):
     event_indicator = y["event"]
     event_time = y["time"]
     risk_scores = estimator.predict(X)
-    concord_index, _ = c_index(event_indicator, event_time, risk_scores)
+    concord_index = c_index(event_indicator, event_time, risk_scores)[0]
     return concord_index
 
 
@@ -151,7 +159,7 @@ def predict_hazard_function(clf, X, event_times="auto", smooth=False):
 
     dy = np.diff(y_hazards, axis=1, prepend=0)
     dx = dx.reshape(1, -1)
-    with np.errstate(divide='ignore', invalid='ignore'):
+    with np.errstate(divide="ignore", invalid="ignore"):
         df = dy / dx
         # in case of 0/0 -> NaN, set these to 1
         zero_mask = (dy == 0) & (dx == 0)
@@ -162,7 +170,6 @@ def predict_hazard_function(clf, X, event_times="auto", smooth=False):
 
 
 def rolling_kernel(curve, kernel_size=10):
-
 
     if isinstance(kernel_size, int):
         out_kernel = np.ones(kernel_size) / kernel_size  # 1/ N, N times (uniform)
@@ -220,18 +227,14 @@ class SurvivalModelConverter:
         tree_dict = self._tree_structure_as_dict(tree_obj, output_format)
 
         if isinstance(tree_obj, SurvivalTree):
-            tree_dict = self._handle_intervals_survival_tree(
-                tree_obj, tree_dict, output_format
-            )
+            tree_dict = self._handle_intervals_survival_tree(tree_obj, tree_dict, output_format)
         else:
             raise ValueError(f"Unsupported tree object type: {type(tree_obj)}")
 
         tree_dict["base_offset"] = tree_dict["values"][0]  # root node (0) prediction
         return tree_dict
 
-    def tree_list_to_dict_model(
-        self, tree_list, is_gradient_based=False, learning_weight=1.0
-    ):
+    def tree_list_to_dict_model(self, tree_list, is_gradient_based=False, learning_weight=1.0):
         """
         Converts a list of tree dictionaries into a model dictionary.
         """
@@ -241,7 +244,7 @@ class SurvivalModelConverter:
         # Adjust tree values and base offsets based on learning weights
         for i, t in enumerate(tree_list):
             t["values"] *= learning_weight[i]
-            t["prior_values"] *= learning_weight[i]
+            # t["prior_values"] *= learning_weight[i]
             t["base_offset"] *= learning_weight[i]
 
         base_offset = self._compute_base_offset(tree_list, is_gradient_based)
@@ -265,9 +268,7 @@ class SurvivalModelConverter:
         if isinstance(self.clf_obj, RandomSurvivalForest):
             tree_obj = self.clf_obj[idx]  # Default behaviour for accessing tree
         elif isinstance(self.clf_obj, GradientBoostingSurvivalAnalysis):
-            tree_obj = self.clf_obj[
-                idx
-            ]  # this is now a weird np.array object with one elemenet
+            tree_obj = self.clf_obj[idx]  # this is now a weird np.array object with one elemenet
             assert tree_obj.shape == (1,)  # as of scikit-survival 0.22.1
             tree_obj = tree_obj[0]
         return tree_obj
@@ -307,9 +308,7 @@ class SurvivalModelConverter:
             self.t_end = tree_dict["unique_times_"][-1] + 1
         if self.t_end is None and tree_dict["unique_times_"] is not None:
             # Select median time to (any) event if self.t_end not specified
-            self.t_end = tree_dict["unique_times_"][
-                len(tree_dict["unique_times_"]) // 2
-            ]
+            self.t_end = tree_dict["unique_times_"][len(tree_dict["unique_times_"]) // 2]
 
         if self.t_end is not None and self.t_end <= self.t_start:
             raise ValueError(
@@ -342,22 +341,21 @@ class SurvivalModelConverter:
             "probability",
             "auto",
         ]:
+            # Ensure numerical stability by setting S(t_start) >= 1e-7
+            surv_start = np.maximum(tree_obj.tree_.value[:, index_start, 1], 1e-7)
+            surv_end = tree_obj.tree_.value[:, index_end, 1]
+
             # Compute conditional probabilities (for each tree).
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=RuntimeWarning)
-                conditional_prob = (
-                    1
-                    - tree_obj.tree_.value[:, index_end, 1]
-                    / tree_obj.tree_.value[:, index_start, 1]
-                ).reshape(-1, 1)
+            # with warnings.catch_warnings():
+            #     warnings.simplefilter("ignore", category=RuntimeWarning)
+            conditional_prob = (1 - surv_end / surv_start).reshape(-1, 1)
             # Handle division by zero or NaN values
-            conditional_prob[np.isnan(conditional_prob)] = self.fallback_prob_ratio
+            # conditional_prob[np.isnan(conditional_prob)] = self.fallback_prob_ratio
             tree_dict["values"] = conditional_prob
 
             # store probability for which the event is conditioned upon: 1 - S(t)
-            tree_dict["prior_values"] = 1 - tree_obj.tree_.value[
-                :, index_start, 1
-            ].reshape(-1, 1)
+            # IS THIS EVEN NEEDED?
+            # tree_dict["prior_values"] = 1 - surv_start.reshape(-1, 1)
 
         elif isinstance(tree_obj, SurvivalTree) and output_format in [
             "hazard",
@@ -365,36 +363,32 @@ class SurvivalModelConverter:
         ]:
             # Compute conditional probabilities (for each tree).
             tree_dict["values"] = (
-                tree_obj.tree_.value[:, index_end, 0]
-                - tree_obj.tree_.value[:, index_start, 0]
+                tree_obj.tree_.value[:, index_end, 0] - tree_obj.tree_.value[:, index_start, 0]
             ).reshape(-1, 1)
 
             # store hazard incurred until time t: H(t)
-            tree_dict["prior_values"] = tree_obj.tree_.value[:, index_start, 0].reshape(
-                -1, 1
-            )
+            # tree_dict["prior_values"] = tree_obj.tree_.value[:, index_start, 0].reshape(
+            #     -1, 1
+            # )
 
         elif isinstance(tree_obj, SurvivalTree) and output_format in ["survival"]:
             # Compute conditional survival probabilities (for each tree).
             conditional_surv = (
-                tree_obj.tree_.value[:, index_end, 1]
-                / tree_obj.tree_.value[:, index_start, 1]
+                tree_obj.tree_.value[:, index_end, 1] / tree_obj.tree_.value[:, index_start, 1]
             ).reshape(-1, 1)
             conditional_surv[np.isnan(conditional_surv)] = (
                 1 - self.fallback_prob_ratio
             )  # S(t)= 1-P(t)
             tree_dict["values"] = conditional_surv
             # store probability of survival until time t: S(t)
-            tree_dict["prior_values"] = tree_obj.tree_.value[:, index_start, 0].reshape(
-                -1, 1
-            )
+            # tree_dict["prior_values"] = tree_obj.tree_.value[:, index_start, 0].reshape(
+            #     -1, 1
+            # )
 
         elif not isinstance(tree_obj, SurvivalTree):
             ValueError(f"Not implemented yet for learner {tree_obj.__name__}")
         else:
-            raise ValueError(
-                f"Unsupported output_format '{output_format}' for survival tree."
-            )
+            raise ValueError(f"Unsupported output_format '{output_format}' for survival tree.")
 
         return tree_dict
 
@@ -425,9 +419,7 @@ class SurvivalModelConverter:
         output_formats = {t["output_format"] for t in tree_list}
         ensemble_classes = {t["ensemble_class"] for t in tree_list}
         if len(output_formats) > 1 or len(ensemble_classes) > 1:
-            raise ValueError(
-                "Inconsistent output formats or ensemble classes in tree list."
-            )
+            raise ValueError("Inconsistent output formats or ensemble classes in tree list.")
         return output_formats.pop(), ensemble_classes.pop()
 
 
@@ -459,10 +451,7 @@ def format_SHAP_values(shap_values, clf, X):
     if isinstance(shap_values.base_values, np.ndarray):
         shap_values.base_values = np.mean(shap_values.base_values)
 
-    if (
-        isinstance(shap_values.base_values, np.ndarray)
-        and len(shap_values.base_values) > 1
-    ):
+    if isinstance(shap_values.base_values, np.ndarray) and len(shap_values.base_values) > 1:
         shap_values.base_values = shap_values.base_values[0]  # [0]
 
     return shap_values
@@ -475,7 +464,6 @@ def predict_proba_at_T(clf, X, t_start=0, t_end=None):
         print("Analysing for t_end = ", clf.unique_times_[index_end])
     else:
         assert t_start < t_end
-
 
     # to idenitify corresponding index, pick last "False" index before "True" appears
     index_start = np.argmax(clf.unique_times_ >= t_start) - 1

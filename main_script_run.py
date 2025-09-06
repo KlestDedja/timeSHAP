@@ -27,7 +27,7 @@ from utilities import format_timedelta, format_SHAP_values
 from utilities import save_placeholder_plot, compute_x_positions
 
 DPI_RES = 180
-DRAFT_RUN = False
+DRAFT_RUN = True
 
 
 if __name__ == "__main__":
@@ -42,6 +42,7 @@ if __name__ == "__main__":
     ).to_records(index=False)
     y = auto_rename_fields(y)
     from utilities import map_time_to_six_bins
+
     # y = map_time_to_six_bins(y, time_field="time", event_field="event")
 
     # with open("surv_outcome.pkl", "rb") as f:
@@ -78,9 +79,7 @@ if __name__ == "__main__":
     y_pred_surv = clf.predict_survival_function(X_test, return_array=True)
     y_pred_surv = pd.DataFrame(y_pred_surv, columns=unique_times)
 
-    IDX_PLOT = (
-        1  # meaningful example is idx = 36 for example data with size = 700, and idx =1 for the full data
-    )
+    IDX_PLOT = 1  # meaningful example is idx = 36 for example data with size = 700, and idx =1 for the full data
     FONTSIZE = 14
 
     y_survs = clf.predict_survival_function(X_test, return_array=True)
@@ -102,7 +101,7 @@ if __name__ == "__main__":
     plt.title("Survival function $S(t)$", fontsize=FONTSIZE + 2)
     plt.plot(unique_times, y_surv_smooth, lw=2)
     plt.xlabel("time $t$", fontsize=FONTSIZE)
-    plt.xlim(0, max(unique_times)*1.02)
+    plt.xlim(0, max(unique_times) * 1.02)
     plt.ylabel("$S(t)$", fontsize=FONTSIZE)
     plt.ylim(0, 1.05)
     plt.savefig(os.path.join(root_folder, fig_folder, "survival-curve-example.pdf"))
@@ -115,7 +114,7 @@ if __name__ == "__main__":
     plt.title(r"Cum. Hazard function $\Lambda(t)$", fontsize=FONTSIZE + 2)
     plt.plot(unique_times, y_hazard_smooth, lw=2)
     plt.xlabel("time $t$", fontsize=FONTSIZE)
-    plt.xlim(0, max(unique_times)*1.02)
+    plt.xlim(0, max(unique_times) * 1.02)
     plt.ylabel(r"$\Lambda(t)$", fontsize=FONTSIZE)
     plt.savefig(os.path.join(root_folder, fig_folder, "cum-hazard-curve-example.pdf"))
     if DRAFT_RUN:
@@ -217,7 +216,6 @@ if __name__ == "__main__":
         shap_values_int = format_SHAP_values(shap_values_int, clf, X_test)
         interval_shap_values[f"{str(t_start)}-{str(t_end)}"] = shap_values_int
 
-
     # examples to explain: 3 for draft run, 12 for full data
     N = 3 if DRAFT_RUN else 8
 
@@ -296,8 +294,12 @@ if __name__ == "__main__":
         shap_base = shap_values[i].base_values
         png_path = os.path.join(general_figs_folder, "local-SHAP", local_plt_name_png)
 
-        if (not np.any(np.isfinite(shap_vals))) or (not np.isfinite(shap_base) or np.unique(shap_vals).size < 2):
-            print(f"Warning: SHAP values either all equal, or are all NaN or inf. Creating empty plot.")
+        if (not np.any(np.isfinite(shap_vals))) or (
+            not np.isfinite(shap_base) or np.unique(shap_vals).size < 2
+        ):
+            print(
+                f"Warning: SHAP values either all equal, or are all NaN or inf. Creating empty plot."
+            )
             save_placeholder_plot(png_path, dpi_res=DPI_RES)
         else:
             fig, ax = plt.subplots(figsize=(5, 5))
@@ -316,8 +318,10 @@ if __name__ == "__main__":
             )
             plt.close(fig)  # Close the figure to free up memory
             # Check file size after saving
-            if os.path.exists(png_path) and os.path.getsize(png_path) > 5 * 1024 * 1024: # > 5 MB
-                print("Warning: (full interval) SHAP waterfall plot file is too large. Creating empty plot.")
+            if os.path.exists(png_path) and os.path.getsize(png_path) > 5 * 1024 * 1024:  # > 5 MB
+                print(
+                    "Warning: (full interval) SHAP waterfall plot file is too large. Creating empty plot."
+                )
                 os.remove(png_path)
                 save_placeholder_plot(png_path, dpi_res=DPI_RES)
 
@@ -354,17 +358,42 @@ if __name__ == "__main__":
             single_plotwidth = max(3.4, 7 - len(interval_shap_values))
 
             # Check for NaN or inf in SHAP values before plotting
-            if not (np.all(np.isfinite(shap_values_use.values)) and np.all(np.isfinite(shap_values_use.base_values))):
-                print(f"Warning: SHAP values for interval {key} contain NaN or inf. Creating empty plot.")
+            if not (
+                np.all(np.isfinite(shap_values_use.values))
+                and np.all(np.isfinite(shap_values_use.base_values))
+            ):
+                print(
+                    f"Warning: SHAP values for interval {key} contain NaN or inf. Creating empty plot."
+                )
                 fig, ax = plt.subplots(figsize=(single_plotwidth, 7))
-                ax.set_title(f"Output explanation, interval [{key})   ", fontsize=round(7 * (DPI_RES / 72)))
-                ax.text(0.5, 0.5, "No valid data", ha='center', va='center', fontsize=14, color='black', transform=ax.transAxes)
-                ax.axis('off')
-                fig.savefig(os.path.join(interval_figs_folder, local_interv_plt_name_png), bbox_inches="tight", dpi=DPI_RES)
-                fig.savefig(os.path.join(interval_figs_folder, local_interv_plt_name_pdf), bbox_inches="tight", dpi=DPI_RES)
+                ax.set_title(
+                    f"Output explanation, interval [{key})   ",
+                    fontsize=round(7 * (DPI_RES / 72)),
+                )
+                ax.text(
+                    0.5,
+                    0.5,
+                    "No valid data",
+                    ha="center",
+                    va="center",
+                    fontsize=14,
+                    color="black",
+                    transform=ax.transAxes,
+                )
+                ax.axis("off")
+                fig.savefig(
+                    os.path.join(interval_figs_folder, local_interv_plt_name_png),
+                    bbox_inches="tight",
+                    dpi=DPI_RES,
+                )
+                fig.savefig(
+                    os.path.join(interval_figs_folder, local_interv_plt_name_pdf),
+                    bbox_inches="tight",
+                    dpi=DPI_RES,
+                )
                 print(f"Saving figure with size: {fig.get_size_inches()} inches")
                 plt.close(fig)
-            else: # NaN values found, saving png file only ( no PDF file)
+            else:  # NaN values found, saving png file only ( no PDF file)
                 fig, ax = plt.subplots(figsize=(single_plotwidth, 7))
                 plt.sca(ax)  # make this Axes current for SHAP
                 ax = shap.plots.waterfall(shap_values_use, max_display=10, show=False)
@@ -397,10 +426,13 @@ if __name__ == "__main__":
         # Here manipulate and paste the images one next to each other
 
         # Use original plot files (must be PNG for PIL compatibility)
-        surv_path = os.path.join(general_figs_folder, "survival-curves", f"survival_curve_idx{i}.png")
+        surv_path = os.path.join(
+            general_figs_folder, "survival-curves", f"survival_curve_idx{i}.png"
+        )
         local_path = os.path.join(general_figs_folder, "local-SHAP", local_plt_name_png)
         interval_paths = [
-            os.path.join(interval_figs_folder, f"Local_SHAP_idx{i}_T{key}.png") for key in interval_shap_values.keys()
+            os.path.join(interval_figs_folder, f"Local_SHAP_idx{i}_T{key}.png")
+            for key in interval_shap_values.keys()
         ]
 
         surv_image = Image.open(surv_path)
