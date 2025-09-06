@@ -27,14 +27,16 @@ from utilities import format_timedelta, format_SHAP_values
 from utilities import save_placeholder_plot, compute_x_positions
 
 DPI_RES = 180
-DRAFT_RUN = True
+DRAFT_RUN = False
 
 
 if __name__ == "__main__":
 
     root_folder = os.getcwd()
 
-    X = pd.read_csv(os.path.join(root_folder, "FLChain-single-event-imputed", "data.csv"))
+    X = pd.read_csv(
+        os.path.join(root_folder, "FLChain-single-event-imputed", "data.csv")
+    )
     # X['flc_ratio'] = X['kappa']/X['lambda']
     X.rename(columns={"sample_yr": "sample_year"})
     y = pd.read_csv(
@@ -59,13 +61,19 @@ if __name__ == "__main__":
 
     # choose whether to store in `draft-figures` folder (in .gitignore)
     # or in the normal `figures` folder
-    fig_folder = "draft-figures" if DRAFT_RUN else "figures"  # pylint: disable=invalid-name
+    fig_folder = (
+        "draft-figures" if DRAFT_RUN else "figures"
+    )  # pylint: disable=invalid-name
     general_figs_folder = os.path.join(root_folder, fig_folder)
     interval_figs_folder = os.path.join(root_folder, fig_folder, "interval-plots")
 
-    clf = RandomSurvivalForest(n_estimators=100, min_samples_split=10, n_jobs=5, random_state=0)
+    clf = RandomSurvivalForest(
+        n_estimators=100, min_samples_split=10, n_jobs=5, random_state=0
+    )
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=1
+    )
     clf.fit(X_train, y_train)
     y_pred = clf.predict(X_test)
 
@@ -125,7 +133,9 @@ if __name__ == "__main__":
     plt.figure()
     plt.title(r"Hazard function $\lambda(t)$", fontsize=FONTSIZE + 2)
     plt.plot(unique_times, 100 * dy_hazard_smooth, lw=2)
-    plt.axhline(0, color="gray", linestyle="--", linewidth=1, zorder=0)  # thin line at y=0
+    plt.axhline(
+        0, color="gray", linestyle="--", linewidth=1, zorder=0
+    )  # thin line at y=0
     plt.xlabel("time $t$", fontsize=FONTSIZE)
     plt.xlim(0, max(unique_times) * 1.02)
     plt.ylabel(r"$100\:\lambda(t)$", fontsize=FONTSIZE)
@@ -135,7 +145,9 @@ if __name__ == "__main__":
         plt.pause(0.4)
     plt.close()
 
-    convert_all = SurvivalModelConverter(clf_obj=clf, t_start=0, t_end=max(unique_times) * 1.02)
+    convert_all = SurvivalModelConverter(
+        clf_obj=clf, t_start=0, t_end=max(unique_times) * 1.02
+    )
 
     clf_dict = []
     tree_dicts = [
@@ -194,7 +206,9 @@ if __name__ == "__main__":
 
         print(f"Computing SHAP values for interval: [{t_start}, {t_end}) ...")
 
-        convert_interv = SurvivalModelConverter(clf_obj=clf, t_start=t_start, t_end=t_end)
+        convert_interv = SurvivalModelConverter(
+            clf_obj=clf, t_start=t_start, t_end=t_end
+        )
 
         clf_interv = []
         tree_intervs = [
@@ -279,7 +293,9 @@ if __name__ == "__main__":
         plt.yticks(np.arange(0.1, 1, 0.2), None, minor=True)
         plt.legend(fontsize=round(6 * (DPI_RES / 72)))  # loc='auto' or 'upper right'
         plt.savefig(
-            os.path.join(general_figs_folder, "survival-curves", f"survival_curve_idx{i}.png"),
+            os.path.join(
+                general_figs_folder, "survival-curves", f"survival_curve_idx{i}.png"
+            ),
             bbox_inches="tight",
             dpi=DPI_RES,
         )
@@ -305,7 +321,9 @@ if __name__ == "__main__":
             fig, ax = plt.subplots(figsize=(5, 5))
             plt.sca(ax)  # make this Axes current for SHAP
             ax = shap.plots.waterfall(shap_values[i], max_display=10, show=False)
-            ax.set_title("Output explanation, full interval", fontsize=round(7 * (DPI_RES / 72)))
+            ax.set_title(
+                "Output explanation, full interval", fontsize=round(7 * (DPI_RES / 72))
+            )
             fig.savefig(
                 os.path.join(general_figs_folder, "local-SHAP", local_plt_name_pdf),
                 bbox_inches="tight",
@@ -318,7 +336,9 @@ if __name__ == "__main__":
             )
             plt.close(fig)  # Close the figure to free up memory
             # Check file size after saving
-            if os.path.exists(png_path) and os.path.getsize(png_path) > 5 * 1024 * 1024:  # > 5 MB
+            if (
+                os.path.exists(png_path) and os.path.getsize(png_path) > 5 * 1024 * 1024
+            ):  # > 5 MB
                 print(
                     "Warning: (full interval) SHAP waterfall plot file is too large. Creating empty plot."
                 )
@@ -458,12 +478,16 @@ if __name__ == "__main__":
         combo_width = max(top_required_width, bottom_required_width)
 
         bottom_row_heights = max(heights)
-        combo_height = max(surv_h, local_h) + y_pad_top + (y_pad_intrarow + bottom_row_heights)
+        combo_height = (
+            max(surv_h, local_h) + y_pad_top + (y_pad_intrarow + bottom_row_heights)
+        )
 
         print(f"Creating PIL image with size: {combo_width}x{combo_height} pixels")
 
         # Create a new image with the appropriate size to contain all the plots
-        combo_image = Image.new("RGB", (combo_width, combo_height), color=(255, 255, 255))
+        combo_image = Image.new(
+            "RGB", (combo_width, combo_height), color=(255, 255, 255)
+        )
 
         # top row placement via helper function: place top plots near the edges
         #  when there are 2 bottom images, space them uniformly otherwise
@@ -491,16 +515,24 @@ if __name__ == "__main__":
 
         # add title image on top of the current collage
         TITLE_SHAP_PLOT = "Time-SHAP explanation"  # for sample instance i={i}
-        font_size = round(28 * (DPI_RES / 72))  # Adjust title size. Scale is relative to dpi=72
-        font = ImageFont.truetype("arial.ttf", font_size)  # insert correct font path here
+        font_size = round(
+            28 * (DPI_RES / 72)
+        )  # Adjust title size. Scale is relative to dpi=72
+        font = ImageFont.truetype(
+            "arial.ttf", font_size
+        )  # insert correct font path here
 
         # Determine the size required for the title text
-        draw = ImageDraw.Draw(Image.new("RGB", (10, 10)))  # Temp image for calculating text size
+        draw = ImageDraw.Draw(
+            Image.new("RGB", (10, 10))
+        )  # Temp image for calculating text size
         try:  # newer Pillow >=11.3.0
             bbox = draw.textbbox((0, 0), TITLE_SHAP_PLOT, font=font)
             text_width, text_height = bbox[2] - bbox[0], bbox[3] - bbox[1]
         except AttributeError:  # older Pillow versions, probably Pillow <10.0
-            text_width, text_height = draw.textsize(TITLE_SHAP_PLOT, font=font)  # older Pillow
+            text_width, text_height = draw.textsize(
+                TITLE_SHAP_PLOT, font=font
+            )  # older Pillow
 
         v_padding = 20  # otherwise bottom part of the title can be cut
 
@@ -552,5 +584,7 @@ if __name__ == "__main__":
         # TODO: improve management of intervals and keys (tuples vs strings)
 
         t1_local_explains = datetime.now()
-        time_local_explains = format_timedelta(t1_local_explains - t0_local_explains, "mm:ss:ms")
+        time_local_explains = format_timedelta(
+            t1_local_explains - t0_local_explains, "mm:ss:ms"
+        )
         print(f"Plotted time-SHAP explanations in: {time_local_explains}")

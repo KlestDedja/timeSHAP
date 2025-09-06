@@ -18,7 +18,9 @@ from sksurv.metrics import concordance_index_censored as c_index
 
 def save_placeholder_plot(os_plot_path_and_name, dpi_res):
     fig, ax = plt.subplots(figsize=(5, 5))
-    ax.set_title("Output explanation, full interval", fontsize=round(7 * (dpi_res / 72)))
+    ax.set_title(
+        "Output explanation, full interval", fontsize=round(7 * (dpi_res / 72))
+    )
     ax.text(
         0.5,
         0.5,
@@ -45,7 +47,9 @@ def compute_x_positions(
         raise ValueError("n_bottom_imgs must be at least 1, and we expect >= 2 images.")
     if n_bottom_imgs == 1:
         w = item_widths[0]
-        warnings.warn("Only one image provided for bottom row, making timeSHAP redundant.")
+        warnings.warn(
+            "Only one image provided for bottom row, making timeSHAP redundant."
+        )
         return [(container_width - w) // 2]
     if n_bottom_imgs == 2:
         _, w1 = item_widths
@@ -84,7 +88,10 @@ def rename_fields_dataframe(df):
     rename_map = {}
     for column in df.columns:
         # Detect binary column
-        if df[column].dropna().apply(float.is_integer).all() and df[column].nunique() == 2:
+        if (
+            df[column].dropna().apply(float.is_integer).all()
+            and df[column].nunique() == 2
+        ):
             rename_map[column] = "event"
         # Detect floating-point column
         elif df[column].dtype == float or df[column].dtype == np.float64:
@@ -227,14 +234,18 @@ class SurvivalModelConverter:
         tree_dict = self._tree_structure_as_dict(tree_obj, output_format)
 
         if isinstance(tree_obj, SurvivalTree):
-            tree_dict = self._handle_intervals_survival_tree(tree_obj, tree_dict, output_format)
+            tree_dict = self._handle_intervals_survival_tree(
+                tree_obj, tree_dict, output_format
+            )
         else:
             raise ValueError(f"Unsupported tree object type: {type(tree_obj)}")
 
         tree_dict["base_offset"] = tree_dict["values"][0]  # root node (0) prediction
         return tree_dict
 
-    def tree_list_to_dict_model(self, tree_list, is_gradient_based=False, learning_weight=1.0):
+    def tree_list_to_dict_model(
+        self, tree_list, is_gradient_based=False, learning_weight=1.0
+    ):
         """
         Converts a list of tree dictionaries into a model dictionary.
         """
@@ -268,7 +279,9 @@ class SurvivalModelConverter:
         if isinstance(self.clf_obj, RandomSurvivalForest):
             tree_obj = self.clf_obj[idx]  # Default behaviour for accessing tree
         elif isinstance(self.clf_obj, GradientBoostingSurvivalAnalysis):
-            tree_obj = self.clf_obj[idx]  # this is now a weird np.array object with one elemenet
+            tree_obj = self.clf_obj[
+                idx
+            ]  # this is now a weird np.array object with one elemenet
             assert tree_obj.shape == (1,)  # as of scikit-survival 0.22.1
             tree_obj = tree_obj[0]
         return tree_obj
@@ -308,7 +321,9 @@ class SurvivalModelConverter:
             self.t_end = tree_dict["unique_times_"][-1] + 1
         if self.t_end is None and tree_dict["unique_times_"] is not None:
             # Select median time to (any) event if self.t_end not specified
-            self.t_end = tree_dict["unique_times_"][len(tree_dict["unique_times_"]) // 2]
+            self.t_end = tree_dict["unique_times_"][
+                len(tree_dict["unique_times_"]) // 2
+            ]
 
         if self.t_end is not None and self.t_end <= self.t_start:
             raise ValueError(
@@ -321,8 +336,8 @@ class SurvivalModelConverter:
         index_start = np.argmax(tree_obj.unique_times_ >= self.t_start) - 1
         index_end = np.argmax(tree_obj.unique_times_ >= self.t_end) - 1
         # This leaves out some edge cases, treated here below:
-        # if self.t_start is smaller than all `unique_times_`
-        if tree_obj.unique_times_[0] > self.t_start:
+        # if self.t_start is leq than all `unique_times_`
+        if tree_obj.unique_times_[0] >= self.t_start:
             index_start = 0
         # if self.t_end is greater than all `unique_times_`: not allowed!
         if tree_obj.unique_times_[0] > self.t_end:
@@ -333,6 +348,8 @@ class SurvivalModelConverter:
             raise ValueError(
                 f"Provided interval: [{self.t_start}, {self.t_end}) is too narrow, no `unique_times_` are available."
             )
+        if index_start == -1:
+            raise ValueError(f"Provided t_start is too big, leading to index_start=-1.")
 
         # MEMENTO: tree.value[node, sample, 0] represents H(t)
         #        - tree.value[node, sample, 1] represents S(t)
@@ -342,6 +359,11 @@ class SurvivalModelConverter:
             "auto",
         ]:
             # Ensure numerical stability by setting S(t_start) >= 1e-7
+            if not all(tree_obj.tree_.value[:, index_start, 1] > 1e-7):
+                warnings.warn(
+                    f"Some survival probabilities at index_start={index_start} are very close to zero. Adjusting them to 1e-7 for numerical stability."
+                )
+
             surv_start = np.maximum(tree_obj.tree_.value[:, index_start, 1], 1e-7)
             surv_end = tree_obj.tree_.value[:, index_end, 1]
 
@@ -361,24 +383,23 @@ class SurvivalModelConverter:
             "hazard",
             "cum. hazard",
         ]:
-            # Compute conditional probabilities (for each tree).
-            tree_dict["values"] = (
-                tree_obj.tree_.value[:, index_end, 0] - tree_obj.tree_.value[:, index_start, 0]
-            ).reshape(-1, 1)
-
             # store hazard incurred until time t: H(t)
+            hazard_start = tree_obj.tree_.value[:, index_start, 0]
+            hazard_end = tree_obj.tree_.value[:, index_end, 0]
+
+            tree_dict["values"] = (hazard_end - hazard_start).reshape(-1, 1)
+
             # tree_dict["prior_values"] = tree_obj.tree_.value[:, index_start, 0].reshape(
             #     -1, 1
             # )
 
         elif isinstance(tree_obj, SurvivalTree) and output_format in ["survival"]:
             # Compute conditional survival probabilities (for each tree).
-            conditional_surv = (
-                tree_obj.tree_.value[:, index_end, 1] / tree_obj.tree_.value[:, index_start, 1]
-            ).reshape(-1, 1)
-            conditional_surv[np.isnan(conditional_surv)] = (
-                1 - self.fallback_prob_ratio
-            )  # S(t)= 1-P(t)
+            # Ensure numerical stability by setting S(t_start) >= 1e-7
+            surv_start = np.maximum(tree_obj.tree_.value[:, index_start, 1], 1e-7)
+            surv_end = tree_obj.tree_.value[:, index_end, 1]
+
+            conditional_surv = (surv_end / surv_start).reshape(-1, 1)
             tree_dict["values"] = conditional_surv
             # store probability of survival until time t: S(t)
             # tree_dict["prior_values"] = tree_obj.tree_.value[:, index_start, 0].reshape(
@@ -388,7 +409,9 @@ class SurvivalModelConverter:
         elif not isinstance(tree_obj, SurvivalTree):
             ValueError(f"Not implemented yet for learner {tree_obj.__name__}")
         else:
-            raise ValueError(f"Unsupported output_format '{output_format}' for survival tree.")
+            raise ValueError(
+                f"Unsupported output_format '{output_format}' for survival tree."
+            )
 
         return tree_dict
 
@@ -419,7 +442,9 @@ class SurvivalModelConverter:
         output_formats = {t["output_format"] for t in tree_list}
         ensemble_classes = {t["ensemble_class"] for t in tree_list}
         if len(output_formats) > 1 or len(ensemble_classes) > 1:
-            raise ValueError("Inconsistent output formats or ensemble classes in tree list.")
+            raise ValueError(
+                "Inconsistent output formats or ensemble classes in tree list."
+            )
         return output_formats.pop(), ensemble_classes.pop()
 
 
@@ -451,7 +476,10 @@ def format_SHAP_values(shap_values, clf, X):
     if isinstance(shap_values.base_values, np.ndarray):
         shap_values.base_values = np.mean(shap_values.base_values)
 
-    if isinstance(shap_values.base_values, np.ndarray) and len(shap_values.base_values) > 1:
+    if (
+        isinstance(shap_values.base_values, np.ndarray)
+        and len(shap_values.base_values) > 1
+    ):
         shap_values.base_values = shap_values.base_values[0]  # [0]
 
     return shap_values
