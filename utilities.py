@@ -68,22 +68,6 @@ def compute_x_positions(
     return xs
 
 
-def adjust_tick_label_size(xfontsize=None, yfontsize=None):
-    """
-    Adjusts the font size of the tick labels for both the x-axis and y-axis.
-    Parameters:
-    - xfontsize: The new font size for the x-axis tick labels. If None, x-axis font size is not changed.
-    - yfontsize: The new font size for the y-axis tick labels. If None, y-axis font size is not changed.
-    """
-    ax = plt.gca()
-    if xfontsize is not None:
-        for label in ax.get_xticklabels():
-            label.set_fontsize(xfontsize)
-    if yfontsize is not None:
-        for label in ax.get_yticklabels():
-            label.set_fontsize(yfontsize)
-
-
 def rename_fields_dataframe(df):
     rename_map = {}
     for column in df.columns:
@@ -374,7 +358,7 @@ class SurvivalModelConverter:
                 # Compute things using index_start. Ensure numerical stability by setting S(t_start) >= 1e-7
                 if not all(tree_obj.tree_.value[:, index_start, 1] > 1e-7):
                     warnings.warn(
-                        f"Some survival probabilities at index_start={index_start} are very close to zero. Adjusting them to 1e-7 for numerical stability."
+                        f"Some survival probabilities at index_start={index_start} are ~ zero. Adjusting them to 1e-7 for numerical stability."
                     )
 
                 surv_start = np.maximum(tree_obj.tree_.value[:, index_start, 1], 1e-7)

@@ -20,6 +20,11 @@ from sklearn.model_selection import train_test_split
 from sksurv.ensemble import RandomSurvivalForest
 from sksurv.metrics import concordance_index_censored as c_index
 
+from plotting_utils import (
+    plot_survival_curve,
+    plot_hazard_curve,
+    plot_cum_hazard_curve,
+)
 from utilities import SurvivalModelConverter, predict_hazard_function
 from utilities import auto_rename_fields
 from utilities import format_timedelta, format_SHAP_values
@@ -41,29 +46,14 @@ if __name__ == "__main__":
         os.path.join(root_folder, "FLChain-single-event-imputed", "targets.csv")
     ).to_records(index=False)
     y = auto_rename_fields(y)
-    from utilities import map_time_to_six_bins
-
-    y = map_time_to_six_bins(y, time_field="time", event_field="event")
-
-    # with open("surv_outcome.pkl", "rb") as f:
-    #     y_np = pickle.load(f)
-    # print(y_np.dtype)
-    # y = np.rec.array(y_np, dtype=[('event', '?'), ('time', '<f8')])
-    # print(y)
-    # X = np.random.rand(len(y), 3)  # Example input data
-    # print(X.shape)
 
     if DRAFT_RUN:  # faster run with less samples (almost instant)
         X = X[:500]
         y = y[:500]
 
-    y_unique_times = np.unique(y["time"])
-
-    for t in y_unique_times:
-        mask = y["time"] == t
-        count_0 = np.sum(y["event"][mask] == 0)
-        count_1 = np.sum(y["event"][mask] == 1)
-        print(f"time={t}: status=0 -> {count_0}, status=1 -> {count_1}")
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=1
+    )
 
     # choose whether to store in `draft-figures` folder (in .gitignore)
     # or in the normal `figures` folder
@@ -77,9 +67,6 @@ if __name__ == "__main__":
         n_estimators=100, min_samples_split=10, n_jobs=5, random_state=0
     )
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=1
-    )
     clf.fit(X_train, y_train)
     y_pred = clf.predict(X_test)
 
@@ -111,40 +98,21 @@ if __name__ == "__main__":
     y_hazard_smooth = rolling_kernel(y_hazard, kernel_size=KERNEL_SIZE)
     dy_hazard_smooth = rolling_kernel(dy_hazard, kernel_size=KERNEL_SIZE)
 
-    plt.figure()
-    plt.title("Survival function $S(t)$", fontsize=FONTSIZE + 2)
-    plt.plot(unique_times, y_surv_smooth, lw=2)
-    plt.xlabel("time $t$", fontsize=FONTSIZE)
-    plt.xlim(0, max(unique_times) * 1.02)
-    plt.ylabel("$S(t)$", fontsize=FONTSIZE)
-    plt.ylim(0, 1.05)
+    plt = plot_survival_curve(unique_times, y_surv_smooth, fontsize=FONTSIZE)
     plt.savefig(os.path.join(root_folder, fig_folder, "survival-curve-example.pdf"))
     if DRAFT_RUN:
         plt.show(block=False)
         plt.pause(0.4)
     plt.close()
 
-    plt.figure()
-    plt.title(r"Cum. Hazard function $\Lambda(t)$", fontsize=FONTSIZE + 2)
-    plt.plot(unique_times, y_hazard_smooth, lw=2)
-    plt.xlabel("time $t$", fontsize=FONTSIZE)
-    plt.xlim(0, max(unique_times) * 1.02)
-    plt.ylabel(r"$\Lambda(t)$", fontsize=FONTSIZE)
+    plt = plot_cum_hazard_curve(unique_times, y_hazard_smooth, fontsize=FONTSIZE)
     plt.savefig(os.path.join(root_folder, fig_folder, "cum-hazard-curve-example.pdf"))
     if DRAFT_RUN:
         plt.show(block=False)
         plt.pause(0.4)
     plt.close()
 
-    plt.figure()
-    plt.title(r"Hazard function $\lambda(t)$", fontsize=FONTSIZE + 2)
-    plt.plot(unique_times, 100 * dy_hazard_smooth, lw=2)
-    plt.axhline(
-        0, color="gray", linestyle="--", linewidth=1, zorder=0
-    )  # thin line at y=0
-    plt.xlabel("time $t$", fontsize=FONTSIZE)
-    plt.xlim(0, max(unique_times) * 1.02)
-    plt.ylabel(r"$100\:\lambda(t)$", fontsize=FONTSIZE)
+    plt = plot_hazard_curve(unique_times, dy_hazard_smooth, fontsize=FONTSIZE)
     plt.savefig(os.path.join(root_folder, fig_folder, "hazard-curve-example.pdf"))
     if DRAFT_RUN:
         plt.show(block=False)
@@ -200,7 +168,7 @@ if __name__ == "__main__":
     time_intervals = [0, 1825, 3600, 5100]
     # time_intervals = [0, 1825, 5100]
 
-    time_intervals = [0, 1.1, 2.1, 3.1, 4.1, 5.1, 6.1]
+    # time_intervals = [0, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5]
     # time_intervals = [0, 2.1, 4.1, 6.1]
 
     # Store interval shap values as dictionary here (intervals as keys):
@@ -253,7 +221,7 @@ if __name__ == "__main__":
 
         """ survival plot here"""
 
-        if len(time_intervals) == 1:
+        if len(time_intervals) < 2:
             raise ValueError("At least two time intervals are required for timeSHAP.")
         if len(time_intervals) == 2:
             surv_curv_figsize = (6, 5.5)
