@@ -26,8 +26,7 @@ from utilities import format_timedelta, format_SHAP_values
 from utilities import save_placeholder_plot, compute_x_positions
 
 DPI_RES = 180
-DRAFT_RUN = True
-
+DRAFT_RUN = False
 
 if __name__ == "__main__":
 
@@ -201,7 +200,8 @@ if __name__ == "__main__":
     time_intervals = [0, 1825, 3600, 5100]
     # time_intervals = [0, 1825, 5100]
 
-    time_intervals = [0, 1.1, 2.1, 3.1, 4.1, 6.1]
+    time_intervals = [0, 1.1, 2.1, 3.1, 4.1, 5.1, 6.1]
+    # time_intervals = [0, 2.1, 4.1, 6.1]
 
     # Store interval shap values as dictionary here (intervals as keys):
     interval_shap_values = {}
@@ -468,17 +468,29 @@ if __name__ == "__main__":
 
         # collect widths and heights, magnitude is pixel-wise, not in inches as in mpl
         widths, heights = zip(*(i.size for i in images))
-        n_bottom_imgs = len(widths)
+        n_interval_imgs = len(widths)
+
+        MAX_ADMITTED_PER_ROW = 4
 
         y_pad_top = 10  # needed not to cut off the survival curve plot title
         y_pad_intrarow = 100  # padding between top row and bottom row
-        x_pad_intrarow = -20 if n_bottom_imgs >= 3 else 0
+        x_pad_intrarow = 0
 
         surv_w, surv_h = surv_image.size
         local_w, local_h = local_image.size
 
-        # Bottom-row and top-row required width
-        bottom_required_width = sum(widths) + x_pad_intrarow * (n_bottom_imgs - 1)
+        # Compute number of rows needed for bottom plots: usually 1 or 2
+        # up to 4 interval plots: 1 row, until 8 interval plots: 2 rows, etc.
+        n_interval_rows = (n_interval_imgs - 1) // MAX_ADMITTED_PER_ROW + 1
+        max_imgs_per_row = int(np.ceil(n_interval_imgs / n_interval_rows))
+
+        # Bottom-row and top-row(s) required width. Note that this computation is assuming
+        # constant interval_plot sizes, wich is what we expect from SHAP
+        # we therefore consider the average width
+        avg_width = int(np.mean(widths))
+        bottom_required_width = avg_width * max_imgs_per_row + x_pad_intrarow * (
+            max_imgs_per_row - 1
+        )
         top_required_width = surv_w + local_w
 
         # Combo width must fit both rows
@@ -486,8 +498,11 @@ if __name__ == "__main__":
 
         bottom_row_heights = max(heights)
         combo_height = (
-            max(surv_h, local_h) + y_pad_top + (y_pad_intrarow + bottom_row_heights)
-        )
+            y_pad_top
+            + max(surv_h, local_h)  # first row height
+            + n_interval_rows * bottom_row_heights
+            + n_interval_rows * y_pad_intrarow
+        )  # n bottom rows + n * padding
 
         print(f"Creating PIL image with size: {combo_width}x{combo_height} pixels")
 
@@ -501,7 +516,7 @@ if __name__ == "__main__":
         pos_left, pos_right = compute_x_positions(
             container_width=combo_width,
             item_widths=[surv_w, local_w],
-            n_bottom_imgs=n_bottom_imgs,
+            n_bottom_imgs=max_imgs_per_row,
         )
 
         # Paste the matplotlib survival curve on top, add some padding on the x-axis
@@ -509,14 +524,37 @@ if __name__ == "__main__":
         # Paste the overall local SHAP next
         combo_image.paste(local_image, (pos_right, y_pad_top))
 
-        # bottom row: iterate and paste with x_pad_intrarow as horizontal padding
+        # bottom row(s): iterate and paste with x_pad_intrarow as horizontal padding
+
+        # starting with first of the bottom rows:
         x_offset = 0
+        extra_intrarow_gap = 0  # used to center last row when not full, default is zero
         y_offset = max(surv_h, local_h) + y_pad_top + y_pad_intrarow
-        for img in images:
-            combo_image.paste(img, (x_offset, y_offset))
+
+        for idx, img in enumerate(images):
+            row_number = idx // max_imgs_per_row
+            if idx % max_imgs_per_row == 0:
+                # new row: reset x_offset
+                x_offset = 0
+                # compute extra space and distribute among the (n_images of this row  + 1) gaps
+                extra_intrarow_gap = (
+                    combo_width - sum(widths[idx : idx + max_imgs_per_row])
+                ) // (len(widths[idx : idx + max_imgs_per_row]) + 1)
+
+            x_curr_offset = x_offset + extra_intrarow_gap
+            y_curr_offset = y_offset + row_number * (
+                bottom_row_heights + y_pad_intrarow
+            )
+            combo_image.paste(
+                img,
+                (x_curr_offset, y_curr_offset),
+            )
+            # now move along the row:
             x_offset += img.size[0]
             x_offset += x_pad_intrarow  # may be negative if you want overlap
-
+            x_offset += (
+                extra_intrarow_gap  # when there are less images than max_imgs_per_row
+            )
         local_image.close()
         surv_image.close()
 
