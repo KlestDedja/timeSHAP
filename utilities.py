@@ -6,29 +6,66 @@ Created on Thu Feb 15 16:45:47 2024
 @institution:  KU Leuven
 """
 
+import os
+import warnings
 import numpy as np
 import pandas as pd
-import warnings
 import matplotlib.pyplot as plt
 from sksurv.tree import SurvivalTree
 from sksurv.ensemble import GradientBoostingSurvivalAnalysis, RandomSurvivalForest
 from sksurv.metrics import concordance_index_censored as c_index
 
 
-def adjust_tick_label_size(xfontsize=None, yfontsize=None):
+def save_placeholder_plot(os_plot_path_and_name, dpi_res):
+    fig, ax = plt.subplots(figsize=(5, 5))
+    ax.set_title(
+        "Output explanation, full interval", fontsize=round(7 * (dpi_res / 72))
+    )
+    ax.text(
+        0.5,
+        0.5,
+        "No valid data",
+        ha="center",
+        va="center",
+        fontsize=14,
+        color="black",
+        transform=ax.transAxes,
+    )
+    ax.axis("off")
+    fig.savefig(os_plot_path_and_name, bbox_inches="tight", dpi=dpi_res)
+    plt.close(fig)
+
+
+def compute_x_positions(
+    container_width: int, item_widths: list[int], n_bottom_imgs: int
+) -> list[int]:
     """
-    Adjusts the font size of the tick labels for both the x-axis and y-axis.
-    Parameters:
-    - xfontsize: The new font size for the x-axis tick labels. If None, x-axis font size is not changed.
-    - yfontsize: The new font size for the y-axis tick labels. If None, y-axis font size is not changed.
+    For n<3: put items at extremes (maximize middle space).
+    For n>=3: equal gaps (>= min_gap when possible). Positions are ints.
     """
-    ax = plt.gca()
-    if xfontsize is not None:
-        for label in ax.get_xticklabels():
-            label.set_fontsize(xfontsize)
-    if yfontsize is not None:
-        for label in ax.get_yticklabels():
-            label.set_fontsize(yfontsize)
+    if n_bottom_imgs < 1:
+        raise ValueError("n_bottom_imgs must be at least 1, and we expect >= 2 images.")
+    if n_bottom_imgs == 1:
+        w = item_widths[0]
+        warnings.warn(
+            "Only one image provided for bottom row, making timeSHAP redundant."
+        )
+        return [(container_width - w) // 2]
+    if n_bottom_imgs == 2:
+        _, w1 = item_widths
+        return [20, container_width - w1]
+
+    # else: we want to build equal gaps (three of them, in this case)
+    total_w = sum(item_widths)
+    n_gaps = 3
+    free_hspace = container_width - total_w
+    h_gap = max(0, free_hspace // n_gaps)
+
+    xs, current = [], h_gap
+    for w in item_widths:
+        xs.append(current)
+        current += w + h_gap
+    return xs
 
 
 def rename_fields_dataframe(df):
@@ -91,7 +128,7 @@ def concordance_index_scorer(estimator, X, y):
     event_indicator = y["event"]
     event_time = y["time"]
     risk_scores = estimator.predict(X)
-    concord_index, _ = c_index(event_indicator, event_time, risk_scores)
+    concord_index = c_index(event_indicator, event_time, risk_scores)[0]
     return concord_index
 
 
@@ -113,70 +150,49 @@ def predict_hazard_function(clf, X, event_times="auto", smooth=False):
 
     dy = np.diff(y_hazards, axis=1, prepend=0)
     dx = dx.reshape(1, -1)
-    df = dy / dx
+    with np.errstate(divide="ignore", invalid="ignore"):
+        df = dy / dx
+        # in case of 0/0 -> NaN, set these to 1
+        zero_mask = (dy == 0) & (dx == 0)
+        df[zero_mask] = 1
+        # inf/anything or anything/0 (except 0/0) -> inf, leave as is
 
     return df
 
 
-# def take_derivative(y_original, dx, axis=1,):
-#     # y_hazards = clf.predict_cumulative_hazard_function(X, return_array=True)
-#     dy = np.diff(y_original, axis=axis, prepend=0)
-#     dx = dx.reshape(1, -1)
-#     df = dy/dx
-
-#     return df
-
-
-# from scipy.stats import gaussian_kde
-
-
-def rolling_kernel(curve, kernel_size=10, kernel=None):
-
-    if kernel_size == None:
-        kernel_size = 10
+def rolling_kernel(curve, kernel_size=10):
 
     if isinstance(kernel_size, int):
-        out_kernel = np.ones(kernel_size) / kernel_size  # 1/ N N times (uniform)
-
-    if kernel is not None:  # normalise it, if not done already
-        out_kernel = kernel / np.sum(kernel)
-
+        out_kernel = np.ones(kernel_size) / kernel_size  # 1/ N, N times (uniform)
+        out_kernel = out_kernel / np.sum(out_kernel)
+    else:
+        raise ValueError("kernel_size must be an integer.")
     # Smooth the array along the rows
-    smoothed_curve = np.convolve(curve, out_kernel, mode="valid")
-    pad_l = len(curve) - len(smoothed_curve)
+    if kernel_size > 1:
+        smoothed_curve = np.convolve(curve, out_kernel, mode="valid")
+        pad_l = len(curve) - len(smoothed_curve)
 
-    end_values = (curve[0], curve[-1])
+        end_values = (curve[0], curve[-1])
 
-    padded_curve = np.pad(
-        smoothed_curve,
-        pad_width=(pad_l // 2, pad_l - pad_l // 2),
-        mode="linear_ramp",
-        end_values=end_values,
-    )
+        padded_curve = np.pad(
+            smoothed_curve,
+            pad_width=(pad_l // 2, pad_l - pad_l // 2),
+            mode="linear_ramp",
+            end_values=end_values,
+        )
+    else:
+        padded_curve = curve
 
     return padded_curve
 
 
 class SurvivalModelConverter:
-    """
-    Given the semi-closed interval of time (t_start, t_end]
-    This class converts scikit-survival's base learners of a
-    RandomSurvivalForest in a dict format that has binary outcomes
-    and is therefore compatible with SHAP's library (tested until shap==0.47)
-    Importantly, we consider the semi-closed interval where the start time is not
-    included and the end time is included, to avoid counting twice events
-    on the edge of the time intervals.
-    The choice for semi-closed intervals of the type (t_start, t_end]
-    rather than the type [t_start, t_end) comes from the fact that
-    survival function S(t) are **right** continuous.
-    """
 
     def __init__(self, clf_obj, t_start=0, t_end=None, fallback_prob_ratio=0):
         self.clf_obj = clf_obj
-        self.t_start = t_start  # Start time (extreme included)
+        self.t_start = t_start
         self.t_end = t_end
         self.fallback_prob_ratio = fallback_prob_ratio
-        self.initial_survival = 1 # S(t)
 
         params_to_validate = {
             "t_start": t_start,
@@ -222,9 +238,9 @@ class SurvivalModelConverter:
 
         # Adjust tree values and base offsets based on learning weights
         for i, t in enumerate(tree_list):
-            t["values"] = t["values"] * learning_weight[i]
-            t["prior_values"] = t["prior_values"] * learning_weight[i]
-            t["base_offset"] = t["base_offset"] * learning_weight[i]
+            t["values"] *= learning_weight[i]
+            # t["prior_values"] *= learning_weight[i]
+            t["base_offset"] *= learning_weight[i]
 
         base_offset = self._compute_base_offset(tree_list, is_gradient_based)
         output_format, ensemble_class = self._ensure_consistency(tree_list)
@@ -242,7 +258,7 @@ class SurvivalModelConverter:
         """
         Extracts the tree object from the classifier. Works for SurvivalTree in
         RandomSurvivalForest.
-        TODO: make it work for RegressionTree in GradientBoostingSurvivalAnalysis.
+        TODO: make ti work for RegressionTree in GradientBosostingSurvivalAnalysis.
         """
         if isinstance(self.clf_obj, RandomSurvivalForest):
             tree_obj = self.clf_obj[idx]  # Default behaviour for accessing tree
@@ -299,25 +315,31 @@ class SurvivalModelConverter:
             )
 
         # Compute indices for self.t_start and self.t_end in `unique_times_`
-        # Remembering that argmax returns the FIRST maximum arg for an array, we
-        # identifies the largest element of (sorted array) unique_times_ such that
-        # element <= t_start (the last `False` element)
-        if tree_obj.unique_times_[0] >= self.t_start:
+        # identifies the last element of (sorted array) unique_times_ such that
+        # element_start <= t_start and element_end < t_end. Remember argmax returns the FIRST maximum arg
+        index_start = np.argmax(tree_obj.unique_times_ >= self.t_start) - 1
+        index_end = np.argmax(tree_obj.unique_times_ >= self.t_end) - 1
+        # This leaves out some edge cases, treated here below:
+        # if self.t_start is leq than all `unique_times_`
+        if tree_obj.unique_times_[0] == self.t_start:
             index_start = 0
+        if tree_obj.unique_times_[0] > self.t_start:
+            start_before_t0 = True
         else:
-            index_start = np.argmax(tree_obj.unique_times_ > self.t_start) - 1
+            start_before_t0 = False
 
-        if tree_obj.unique_times_[0] >= self.t_end:
+        # if self.t_end is greater than all `unique_times_`: not allowed!
+        if tree_obj.unique_times_[0] > self.t_end:
             raise ValueError(
                 f"t_end={self.t_end:.4f} is too small. Must be greater than {min(tree_obj.unique_times_):.4f}"
             )
-        # largest element s.t. element < t_end (again, take the last `False` clause)
-        index_end = np.argmax(tree_obj.unique_times_ > self.t_end) - 1
-
-        # if self.t_end is smaller than all `unique_times_`: not allowed!
-        if index_start >= index_end and index_end != -1:
+        if index_start >= index_end and index_end != -1 and start_before_t0 is False:
             raise ValueError(
                 f"Provided interval: [{self.t_start}, {self.t_end}) is too narrow, no `unique_times_` are available."
+            )
+        if index_start == -1 and start_before_t0 is False:
+            raise ValueError(
+                f"Got index_start=-1, likely due to t_start being too big."
             )
 
         # MEMENTO: tree.value[node, sample, 0] represents H(t)
@@ -327,68 +349,75 @@ class SurvivalModelConverter:
             "probability",
             "auto",
         ]:
-            # Compute conditional probabilities (for each tree):
-            # P(t | t > t0) = 1 - S(t1)/S(t0)
-            if self.t_start < tree_obj.unique_times_[0]:
-                given_baseline = np.full(tree_obj.tree_.value[:, 0, 1].shape, self.initial_survival)
-            else: # fetch S(t0)
-                given_baseline = tree_obj.tree_.value[:, index_start, 1]
 
-            conditional_prob = (
-                1
-                - tree_obj.tree_.value[:, index_end, 1]
-                / given_baseline
-            ).reshape(-1, 1)
-            # Handle division by zero or NaN values: happens when S(t0) = 0,
-            # which implies S(t1) = 0 . In such cases P(t | t > t0) is undefined,
-            # we therefore set it to = conditional_prob, a predefined constant
-            conditional_prob[np.isnan(conditional_prob)] = self.fallback_prob_ratio
+            if start_before_t0:
+                surv_start = np.ones(
+                    tree_obj.tree_.value[:, 0, 1].shape
+                )  # set (t < t_start) = 1
+            else:
+                # Compute things using index_start. Ensure numerical stability by setting S(t_start) >= 1e-7
+                if not all(tree_obj.tree_.value[:, index_start, 1] > 1e-7):
+                    warnings.warn(
+                        f"Some survival probabilities at index_start={index_start} are ~ zero. Adjusting them to 1e-7 for numerical stability."
+                    )
+
+                surv_start = np.maximum(tree_obj.tree_.value[:, index_start, 1], 1e-7)
+
+            surv_end = tree_obj.tree_.value[:, index_end, 1]
+
+            conditional_prob = (1 - surv_end / surv_start).reshape(-1, 1)
+
             tree_dict["values"] = conditional_prob
 
             # store probability for which the event is conditioned upon: 1 - S(t)
-            tree_dict["prior_values"] = 1 - given_baseline.reshape(-1, 1)
+            # IS THIS EVEN NEEDED?
+            # tree_dict["prior_values"] = 1 - surv_start.reshape(-1, 1)
 
         elif isinstance(tree_obj, SurvivalTree) and output_format in [
             "hazard",
             "cum. hazard",
         ]:
-
-            if self.t_start < tree_obj.unique_times_[0]:
-                incurred_hazard = np.zeros(tree_obj.tree_.value[:, 0, 0].shape)
-            else: # fetch H(t0)
-                incurred_hazard = tree_obj.tree_.value[:, index_start, 0]
-
-            # Compute conditional probabilities (for each tree).
-            tree_dict["values"] = (
-                tree_obj.tree_.value[:, index_end, 0]
-                - incurred_hazard
-            ).reshape(-1, 1)
-
             # store hazard incurred until time t: H(t)
-            tree_dict["prior_values"] = incurred_hazard.reshape(-1, 1)
+            if start_before_t0:
+                hazard_start = np.zeros(
+                    tree_obj.tree_.value[:, 0, 0].shape
+                )  # set H(0) = 0
+            else:
+                hazard_start = tree_obj.tree_.value[:, index_start, 0]
+
+            hazard_end = tree_obj.tree_.value[:, index_end, 0]
+
+            tree_dict["values"] = (hazard_end - hazard_start).reshape(-1, 1)
+
+            # tree_dict["prior_values"] = tree_obj.tree_.value[:, index_start, 0].reshape(
+            #     -1, 1
+            # )
 
         elif isinstance(tree_obj, SurvivalTree) and output_format in ["survival"]:
-            # Compute conditional survival probabilities (for each tree)
-            if self.t_start < tree_obj.unique_times_[0]:
-                given_baseline = np.full(tree_obj.tree_.value[:, 0, 1].shape, self.initial_survival)
-            else: # fetch S(t0)
-                given_baseline = tree_obj.tree_.value[:, index_start, 1]
+            # Compute conditional survival probabilities (for each tree).
+            # Ensure numerical stability by setting S(t_start) >= 1e-7 and S(t < t_start) = 1
 
-            conditional_surv = (
-                tree_obj.tree_.value[:, index_end, 1]
-                / given_baseline
-            ).reshape(-1, 1)
-            conditional_surv[np.isnan(conditional_surv)] = (
-                1 - self.fallback_prob_ratio
-            )  # S(t)= 1-P(t)
+            if start_before_t0:
+                surv_start = np.ones(tree_obj.tree_.value[:, 0, 1].shape)
+            else:
+                if not all(tree_obj.tree_.value[:, index_start, 1] > 1e-7):
+                    warnings.warn(
+                        f"Some survival probabilities at index_start={index_start} are very close to zero. Adjusting them to 1e-7 for numerical stability."
+                    )
+
+                surv_start = np.maximum(tree_obj.tree_.value[:, index_start, 1], 1e-7)
+
+            surv_end = tree_obj.tree_.value[:, index_end, 1]
+
+            conditional_surv = (surv_end / surv_start).reshape(-1, 1)
             tree_dict["values"] = conditional_surv
             # store probability of survival until time t: S(t)
-            tree_dict["prior_values"] = tree_obj.tree_.value[:, index_start, 0].reshape(
-                -1, 1
-            )
+            # tree_dict["prior_values"] = tree_obj.tree_.value[:, index_start, 0].reshape(
+            #     -1, 1
+            # )
 
         elif not isinstance(tree_obj, SurvivalTree):
-            raise ValueError(f"Not implemented yet for learner {tree_obj.__name__}")
+            ValueError(f"Not implemented yet for learner {tree_obj.__name__}")
         else:
             raise ValueError(
                 f"Unsupported output_format '{output_format}' for survival tree."
@@ -428,147 +457,6 @@ class SurvivalModelConverter:
             )
         return output_formats.pop(), ensemble_classes.pop()
 
-    # def compute_prior_value(self, X, y=None):
-
-
-# %%
-
-
-# from sklearn.ensemble import RandomForestClassifier
-# from sksurv.ensemble import RandomSurvivalForest
-# from sksurv.tree import SurvivalTree
-
-# def SDT_to_dict_interval(clf_obj, idx, output_format, t_start=0, t_end=2, fallback_prob_ratio=0):
-
-
-#     ''' Compatible with single output trees only, at the moment.
-#         compatible with SurvivalTree learners of a RandomSurvivalForest
-#         (scikit-survival 0.21)
-#         and possibly with GradientBosostingSurvivalAnalysis
-#     '''
-
-#     # GBS case needs to be converted:
-#     if isinstance(clf_obj[idx], np.ndarray) and output_format in ["hazard-ratio", "auto"]:
-
-#         if clf_obj.dropout_rate > 0:
-#             raise ValueError('Dropout rate > 0 is not compatible with SHAP adaptation!')
-
-#         assert clf_obj[idx].shape == (1,) #is an array with the Tree as single element: GBS in sksurv
-#         tree_obj = clf_obj[idx][0]
-#     else:
-#         tree_obj = clf_obj[idx] # in a RSF, Survival Trees can be called as clf[i]
-
-#     tree = tree_obj.tree_
-
-#     tree_dict = {
-#         "children_left" : tree.children_left,
-#         "children_right" : tree.children_right,
-#         "children_default" : tree.children_right.copy(), # to be changed when sklearn can handle missing values
-#         "features" : tree.feature,
-#         "thresholds" : tree.threshold,
-#         "node_sample_weight": tree.weighted_n_node_samples,
-#         "n_features_in_": getattr(tree_obj, "n_features_in_", None),
-#         "feature_names_in_": getattr(clf_obj, "feature_names_in_", None),
-#         "unique_times_": getattr(tree_obj, "unique_times_", None),
-#         "is_event_time_": getattr(tree_obj, "is_event_time_", None),
-#         "random_state": getattr(tree_obj, "random_state", None),
-#         "ensemble_class": clf_obj.__class__.__name__,
-#         "learner_class": tree_obj.__class__.__name__
-#     }
-
-#     tree_dict['output_format'] = output_format
-
-#     if isinstance(tree_obj, SurvivalTree):
-
-#         if tree_dict['unique_times_'] is None and output_format not in ['probability']:
-#             raise KeyError('Missing \'unique_times_\' in SurvivalTree-based ensemble.')
-
-#         if t_end is None and tree_dict['unique_times_'] is not None: # select median time to (any) event
-#             t_end = tree_dict['unique_times_'][len(tree_dict['unique_times_'])//2]
-
-
-#         if output_format in ["probability", "auto"]:
-#             # pick last "False" index before "True" appears
-#             index_start = np.argmax(tree_obj.unique_times_ > t_start)-1
-#             index_end = np.argmax(tree_obj.unique_times_ > t_end) -1
-
-#             # it DOES work when all unique_times_ are < T_bin, as it will again select 0-1= -1
-#             # it does not work when all times are > T_bin, as it selects -1 instead of 0
-#             if min(tree_obj.unique_times_) > t_start:
-#                 index_start = 0
-#             if min(tree_obj.unique_times_) > t_end:
-#                 raise ValueError(f'Value for t_end={t_end:.4f} is too small. Mus be greater than {tree_obj.unique_times_:.4f}')
-
-
-#             conditional_Pt = (1 - tree.value[:,index_end, 1] / tree.value[:,index_start, 1]).reshape(-1, 1)
-#             # Reshape needed for consistent outputs (skelarn + SHAP)
-#             # division by zero is possible if some S(t) are = 0 in index_start.
-#             # Leave SHAP values equal to NaN if that happens
-#             if np.isnan(conditional_Pt).sum() > 0:
-#                 conditional_Pt[np.isnan(conditional_Pt)] = fallback_prob_ratio
-#             #     # warning should be raised for individual instances
-#             #     # warnings.warn('NaN values were found when computing interval-specific SHAP values,\
-#             #     # possibly, the event is estimated to happen before the queried time interval [{t_start}-{t_end}]')
-#             tree_dict["values"]  = conditional_Pt
-
-#         else:
-#             raise ValueError('Input not recognized. Double check')
-
-#     else:
-#         raise ValueError("Combination of learner \'{}\' and scenario \'{}\' not recognized".format(tree_obj.__class__.__name__, output_format))
-
-#     tree_dict["base_offset"] = tree_dict['values'][0] # root node (0) prediction
-
-#     return tree_dict
-
-
-# def tree_list_to_dict_model(tree_list, is_gradient_based=False, learning_weight=1.0):
-
-#     ''' given each learner is stored as a dict, create a list of such dicts.
-#     NOTE: the SHAP library assumes that the input custom tree models are
-#     additive, which is not the case for ensemble methods such as RFs
-#     However, RF-like ensembles can be seen as additive models with
-#     learning_rate = 1/n_estimators
-
-#     Finally, we drop the assumption that the learning rate is constant across
-#     iterations. the vector of learning rates can be passed directly here
-#     '''
-
-#     # generalise constant learning rate case, for compatibility with
-#     # non-constant learning rate. Procedure is the same regardless of
-#     # whether the ensemble is gradient based or not
-#     if isinstance(learning_weight, type(None)):
-#         learning_weight = 1.0
-#     if isinstance(learning_weight, (float, int)):
-#         learning_weight = np.array([learning_weight]*len(tree_list))
-
-#     for i, t in enumerate(tree_list): # multiply (or divide?) by learning rate here
-#         t["values"] =  t["values"]*learning_weight[i]
-#         t['base_offset'] = t['base_offset']*learning_weight[i]
-
-#     if is_gradient_based: # Gradient Boosting case: take root value of first tree (should be ~0 anyway)
-#         base_offset = tree_list[0]['base_offset'][0]
-
-#     else: # not gradient case: y-s are fitted independently. Possibly different weights were passed with learning_weight
-#         # why np.mean and not np.sum, is it not resdcaled to suit the additivity set-up already?
-#         base_offset = np.mean(np.array([t['base_offset'] for t in tree_list]))
-
-#     assert len(set([t['output_format'] for t in tree_list])) == 1 # consistency check
-#     assert len(set([t['ensemble_class'] for t in tree_list])) == 1 # consistency check
-
-#     output_format = tree_list[0]['output_format']
-#     ensemble_class = tree_list[0]['ensemble_class']
-
-#     model_as_dict = {
-#         "trees": tree_list, #list of dicts
-#         "base_offset": base_offset, # single value (average of array)
-#         "output_format": output_format,
-#         "ensemble_class": ensemble_class,
-#         "input_dtype": np.float32,
-#         "internal_dtype": np.float32}
-
-#     return model_as_dict
-
 
 def reduce_ensemble_object(clf, factor=10):
 
@@ -592,7 +480,7 @@ def format_SHAP_values(shap_values, clf, X):
             shap_values = shap_values[:, :, 1]
 
     elif isinstance(clf, RandomForestRegressor):
-        shap_values.base_values = shap_values.base_values.ravel() # or flatten() ?
+        shap_values.base_values = shap_values.base_values.ravel()
 
     # for some reason, this is not always consistent. Fix here:
     if isinstance(shap_values.base_values, np.ndarray):
@@ -607,20 +495,17 @@ def format_SHAP_values(shap_values, clf, X):
     return shap_values
 
 
-def predict_proba_at_t(clf, X, t_start=0, t_end=None):
-
+def predict_proba_at_T(clf, X, t_start=0, t_end=None):
 
     if t_end is None:
         index_end = int(len(clf.unique_times_) // 2)
         print("Analysing for t_end = ", clf.unique_times_[index_end])
-
-    assert t_start < t_end, "t_start must be less than t_end"
-
+    else:
+        assert t_start < t_end
 
     # to idenitify corresponding index, pick last "False" index before "True" appears
-    # This mimics the OLD interval setting (closed intervals, both ends included)
-    index_start = np.argmax(clf.unique_times_ > t_start) - 1
-    index_end = np.argmax(clf.unique_times_ > t_end) - 1
+    index_start = np.argmax(clf.unique_times_ >= t_start) - 1
+    index_end = np.argmax(clf.unique_times_ >= t_end) - 1
 
     # it does not work when all times are > T_bin, as it selects -1 instead of 0
     if min(clf.unique_times_) > t_start:
@@ -658,6 +543,21 @@ def format_timedelta(td, time_format):
         raise ValueError(error_message)
 
 
-# if __name__ == '__main__':
+def map_time_to_six_bins(recarray, time_field="time", event_field="event"):
+    """
+    Map the `time_field` in a record array into 6 ordinal bins (1–6)
+    based on quantiles, while keeping the `event_field` untouched.
+    """
+    times = recarray[time_field]
 
-#     print('hello!')
+    # compute the bin edges (0..1 quantiles in 1/6th increments)
+    quantiles = np.quantile(times, np.linspace(0, 1, 7))
+
+    # digitize times into bins [1..6]
+    bins = np.digitize(times, quantiles[1:-1], right=True) + 1
+
+    # build new recarray with same dtype
+    mapped = recarray.copy()
+    mapped[time_field] = bins
+
+    return mapped
