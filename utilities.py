@@ -337,19 +337,26 @@ class SurvivalModelConverter:
         index_end = np.argmax(tree_obj.unique_times_ >= self.t_end) - 1
         # This leaves out some edge cases, treated here below:
         # if self.t_start is leq than all `unique_times_`
-        if tree_obj.unique_times_[0] >= self.t_start:
+        if tree_obj.unique_times_[0] == self.t_start:
             index_start = 0
+        if tree_obj.unique_times_[0] > self.t_start:
+            start_before_t0 = True
+        else:
+            start_before_t0 = False
+
         # if self.t_end is greater than all `unique_times_`: not allowed!
         if tree_obj.unique_times_[0] > self.t_end:
             raise ValueError(
                 f"t_end={self.t_end:.4f} is too small. Must be greater than {min(tree_obj.unique_times_):.4f}"
             )
-        if index_start >= index_end and index_end != -1:
+        if index_start >= index_end and index_end != -1 and start_before_t0 is False:
             raise ValueError(
                 f"Provided interval: [{self.t_start}, {self.t_end}) is too narrow, no `unique_times_` are available."
             )
-        if index_start == -1:
-            raise ValueError(f"Provided t_start is too big, leading to index_start=-1.")
+        if index_start == -1 and start_before_t0 is False:
+            raise ValueError(
+                f"Got index_start=-1, likely due to t_start being too big."
+            )
 
         # MEMENTO: tree.value[node, sample, 0] represents H(t)
         #        - tree.value[node, sample, 1] represents S(t)
@@ -358,21 +365,24 @@ class SurvivalModelConverter:
             "probability",
             "auto",
         ]:
-            # Ensure numerical stability by setting S(t_start) >= 1e-7
-            if not all(tree_obj.tree_.value[:, index_start, 1] > 1e-7):
-                warnings.warn(
-                    f"Some survival probabilities at index_start={index_start} are very close to zero. Adjusting them to 1e-7 for numerical stability."
-                )
 
-            surv_start = np.maximum(tree_obj.tree_.value[:, index_start, 1], 1e-7)
+            if start_before_t0:
+                surv_start = np.ones(
+                    tree_obj.tree_.value[:, 0, 1].shape
+                )  # set (t < t_start) = 1
+            else:
+                # Compute things using index_start. Ensure numerical stability by setting S(t_start) >= 1e-7
+                if not all(tree_obj.tree_.value[:, index_start, 1] > 1e-7):
+                    warnings.warn(
+                        f"Some survival probabilities at index_start={index_start} are very close to zero. Adjusting them to 1e-7 for numerical stability."
+                    )
+
+                surv_start = np.maximum(tree_obj.tree_.value[:, index_start, 1], 1e-7)
+
             surv_end = tree_obj.tree_.value[:, index_end, 1]
 
-            # Compute conditional probabilities (for each tree).
-            # with warnings.catch_warnings():
-            #     warnings.simplefilter("ignore", category=RuntimeWarning)
             conditional_prob = (1 - surv_end / surv_start).reshape(-1, 1)
-            # Handle division by zero or NaN values
-            # conditional_prob[np.isnan(conditional_prob)] = self.fallback_prob_ratio
+
             tree_dict["values"] = conditional_prob
 
             # store probability for which the event is conditioned upon: 1 - S(t)
@@ -384,7 +394,13 @@ class SurvivalModelConverter:
             "cum. hazard",
         ]:
             # store hazard incurred until time t: H(t)
-            hazard_start = tree_obj.tree_.value[:, index_start, 0]
+            if start_before_t0:
+                hazard_start = np.zeros(
+                    tree_obj.tree_.value[:, 0, 0].shape
+                )  # set H(0) = 0
+            else:
+                hazard_start = tree_obj.tree_.value[:, index_start, 0]
+
             hazard_end = tree_obj.tree_.value[:, index_end, 0]
 
             tree_dict["values"] = (hazard_end - hazard_start).reshape(-1, 1)
@@ -395,8 +411,18 @@ class SurvivalModelConverter:
 
         elif isinstance(tree_obj, SurvivalTree) and output_format in ["survival"]:
             # Compute conditional survival probabilities (for each tree).
-            # Ensure numerical stability by setting S(t_start) >= 1e-7
-            surv_start = np.maximum(tree_obj.tree_.value[:, index_start, 1], 1e-7)
+            # Ensure numerical stability by setting S(t_start) >= 1e-7 and S(t < t_start) = 1
+
+            if start_before_t0:
+                surv_start = np.ones(tree_obj.tree_.value[:, 0, 1].shape)
+            else:
+                if not all(tree_obj.tree_.value[:, index_start, 1] > 1e-7):
+                    warnings.warn(
+                        f"Some survival probabilities at index_start={index_start} are very close to zero. Adjusting them to 1e-7 for numerical stability."
+                    )
+
+                surv_start = np.maximum(tree_obj.tree_.value[:, index_start, 1], 1e-7)
+
             surv_end = tree_obj.tree_.value[:, index_end, 1]
 
             conditional_surv = (surv_end / surv_start).reshape(-1, 1)

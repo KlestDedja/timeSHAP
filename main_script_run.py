@@ -20,14 +20,13 @@ from sklearn.model_selection import train_test_split
 from sksurv.ensemble import RandomSurvivalForest
 from sksurv.metrics import concordance_index_censored as c_index
 
-# from utilities import SDT_to_dict_interval as SDT_to_dict, tree_list_to_dict_model, adjust_tick_label_size
 from utilities import SurvivalModelConverter, predict_hazard_function
 from utilities import auto_rename_fields
 from utilities import format_timedelta, format_SHAP_values
 from utilities import save_placeholder_plot, compute_x_positions
 
 DPI_RES = 180
-DRAFT_RUN = False
+DRAFT_RUN = True
 
 
 if __name__ == "__main__":
@@ -45,7 +44,7 @@ if __name__ == "__main__":
     y = auto_rename_fields(y)
     from utilities import map_time_to_six_bins
 
-    # y = map_time_to_six_bins(y, time_field="time", event_field="event")
+    y = map_time_to_six_bins(y, time_field="time", event_field="event")
 
     # with open("surv_outcome.pkl", "rb") as f:
     #     y_np = pickle.load(f)
@@ -58,6 +57,14 @@ if __name__ == "__main__":
     if DRAFT_RUN:  # faster run with less samples (almost instant)
         X = X[:500]
         y = y[:500]
+
+    y_unique_times = np.unique(y["time"])
+
+    for t in y_unique_times:
+        mask = y["time"] == t
+        count_0 = np.sum(y["event"][mask] == 0)
+        count_1 = np.sum(y["event"][mask] == 1)
+        print(f"time={t}: status=0 -> {count_0}, status=1 -> {count_1}")
 
     # choose whether to store in `draft-figures` folder (in .gitignore)
     # or in the normal `figures` folder
@@ -194,7 +201,7 @@ if __name__ == "__main__":
     time_intervals = [0, 1825, 3600, 5100]
     # time_intervals = [0, 1825, 5100]
 
-    # time_intervals = [0, 2, 5, 6]
+    time_intervals = [0, 1.1, 2.1, 3.1, 4.1, 6.1]
 
     # Store interval shap values as dictionary here (intervals as keys):
     interval_shap_values = {}
