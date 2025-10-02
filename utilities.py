@@ -16,7 +16,7 @@ from sksurv.ensemble import GradientBoostingSurvivalAnalysis, RandomSurvivalFore
 from sksurv.metrics import concordance_index_censored as c_index
 
 
-def save_placeholder_plot(os_plot_path_and_name, dpi_res):
+def save_placeholder_plot(plot_path, plot_name, dpi_res):
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.set_title(
         "Output explanation, full interval", fontsize=round(7 * (dpi_res / 72))
@@ -32,7 +32,7 @@ def save_placeholder_plot(os_plot_path_and_name, dpi_res):
         transform=ax.transAxes,
     )
     ax.axis("off")
-    fig.savefig(os_plot_path_and_name, bbox_inches="tight", dpi=dpi_res)
+    fig.savefig(os.path.join(plot_path, plot_name), bbox_inches="tight", dpi=dpi_res)
     plt.close(fig)
 
 
