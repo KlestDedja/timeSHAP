@@ -13,8 +13,6 @@ import shap
 import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw, ImageFont  # stitch images together, write text etc.
 
-# from IPython.display import display
-
 from sklearn.model_selection import train_test_split
 from sksurv.ensemble import RandomSurvivalForest
 from sksurv.metrics import concordance_index_censored as c_index
@@ -30,7 +28,7 @@ from utilities import format_SHAP_values
 from utilities import save_placeholder_plot
 
 DPI_RES = 180
-DRAFT_RUN = True
+DRAFT_RUN = False
 
 if __name__ == "__main__":
 
@@ -443,12 +441,12 @@ if __name__ == "__main__":
         MAX_ADMITTED_PER_ROW = 4
 
         # Step 1: get all image paths needed to build the first combo image, and load them:
-        from paste_combo_image import get_images_from_paths, load_images
+        from paste_combo_image import get_images_from_paths
 
         image_paths = get_images_from_paths(i, interval_keys, **folders)
         images = [Image.open(p) for p in image_paths if os.path.exists(p)]
 
-        bottom_images = images[2:] if len(images) > 2 else []
+        bottom_images = images[2:] if len(images) > 2 else images[1:]
         top_images = images[:2] if len(images) >= 2 else images[:1]
 
         scale_factor = 1.3  # make top row images bigger
@@ -489,7 +487,7 @@ if __name__ == "__main__":
 
         from paste_combo_image import (
             render_title,
-            assemble_final_image,
+            assemble_image_title,
             display_image,
         )
 
@@ -498,7 +496,7 @@ if __name__ == "__main__":
             layout["combo_width"], f"Time-SHAP explanation", DPI_RES
         )
 
-        final_image = assemble_final_image(
+        final_image = assemble_image_title(
             title_image,
             combo_image,
             layout["combo_width"],
@@ -569,11 +567,16 @@ if __name__ == "__main__":
             im.close()
 
         # Step 3: rendering title, final assembly, store and display final combo-image:
+        # we provide more padding for the title for global combo image
         title_image_global = render_title(
-            layout["combo_width"], f"Time-SHAP explanation", DPI_RES
+            layout["combo_width"],
+            f"Time-SHAP explanation",
+            DPI_RES,
+            font_size=28,
+            title_padding=40,
         )
 
-        final_image_global = assemble_final_image(
+        final_image_global = assemble_image_title(
             title_image_global,
             combo_image_global,
             layout["combo_width"],
