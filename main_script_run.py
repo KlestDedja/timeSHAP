@@ -7,7 +7,6 @@ Created on Thu Feb 15 16:45:47 2024
 """
 import os
 import warnings
-from datetime import datetime
 import numpy as np
 import pandas as pd
 import shap
@@ -229,8 +228,6 @@ if __name__ == "__main__":
 
     for i in range(N):
 
-        t0_local_explains = datetime.now()
-
         y_pred_pop = y_train_surv.mean(axis=0)  # sample from training data
         y_pred_pop_med = np.percentile(y_train_surv.values, q=50, axis=0)
         y_pred_pop_low = np.percentile(y_train_surv.values, q=25, axis=0)
@@ -357,7 +354,7 @@ if __name__ == "__main__":
                 shap_values_use.values[np.isnan(shap_values_use.values)] = 0
                 warnings.warn(
                     "NaN values were found when computing interval-specific SHAP values,\
-                possibly, the S(t_start) is estimated to be = 0"
+                possibly, S(t_start) is estimated = 0. Setting NaNs to 0."
                 )
 
             ### TODOs:
@@ -369,8 +366,8 @@ if __name__ == "__main__":
                 np.all(np.isfinite(shap_values_use.values))
                 and np.all(np.isfinite(shap_values_use.base_values))
             ):
-                print(
-                    f"Warning: SHAP values for interval {key} contain NaN or inf. Creating empty plot."
+                warnings.warn(
+                    f"SHAP values for interval {key} contain NaN or inf. Creating empty plot."
                 )
                 fig, ax = plt.subplots(figsize=(5, 7))
                 ax.set_title(
@@ -401,9 +398,9 @@ if __name__ == "__main__":
 
                 print(f"Saving figure with size: {fig.get_size_inches()} inches")
                 plt.close(fig)
-            else:  # NaN values found, saving png file only (no PDF file)
+            else:  # No NaN values found, saving png file only (no PDF file)
                 fig, ax = plt.subplots(figsize=(5, 7))
-                plt.sca(ax)  # make this Axes current for SHAP
+                plt.sca(ax)  # make this Axes current for SHAP (needed?)
                 ax = shap.plots.waterfall(shap_values_use, max_display=10, show=False)
                 ax.set_title(
                     f"Output explanation, interval [{key})   ",
@@ -417,8 +414,7 @@ if __name__ == "__main__":
                     bbox_inches="tight",
                     dpi=DPI_RES,
                 )
-                # plt.show()
-                plt.close(fig)  # Close the figure to free up memory
+                plt.close(fig)
 
             print(f"TIME INTERVAL: [{key})")
             print(
@@ -521,23 +517,18 @@ if __name__ == "__main__":
 
         display_image(final_image)
 
-        t1_local_explains = datetime.now()
-        time_local_explains = format_timedelta(
-            t1_local_explains - t0_local_explains, "mm:ss:ms"
-        )
-        print(f"Plotted time-SHAP explanations in: {time_local_explains}")
-
-        ######    GLOBAL INTERVAL SHAP PLOTS    ######
+        #############       GLOBAL INTERVAL SHAP PLOTS        #############
+        # repeat the same procedure as above, but now for global SHAP plots
+        #############                                         #############
 
         global_folders = {
-            # "survival_curves": survival_figs_folder,
             "global_shap": global_shap_folder,
             "global_interval_shap": global_interv_figs_folder,
         }
 
         MAX_ADMITTED_PER_ROW = 3
 
-        # Step 1: get all image paths needed to build the first combo image, and load them:
+        # Step 1: get all image paths needed to build the second combo image, and load them:
 
         image_paths = get_images_from_paths(i, interval_keys, **global_folders)
         images = load_images(*image_paths)
@@ -552,7 +543,7 @@ if __name__ == "__main__":
         ]
 
         # Step 2: Calculate layout (size of combo image), position all sub-images
-        # accordingly, treat top row and bottom rows separately
+        # accordingly. Treat top row and bottom rows separately
 
         layout = calculate_layout(
             top_images,
@@ -598,14 +589,3 @@ if __name__ == "__main__":
             final_image.save(save_combo_file, dpi=(DPI_RES, DPI_RES))
 
         display_image(final_image)
-
-        print(
-            "Combined plot stored in:",
-            os.path.join(figures_main_folder, "combo-plots"),
-        )
-
-        t1_local_explains = datetime.now()
-        time_local_explains = format_timedelta(
-            t1_local_explains - t0_local_explains, "mm:ss:ms"
-        )
-        print(f"Plotted time-SHAP explanations in: {time_local_explains}")
