@@ -199,7 +199,7 @@ if __name__ == "__main__":
             feature_perturbation="tree_path_dependent",
         )
 
-        interval_str = f"{str(t_start)}-{str(t_end)}"
+        interval_str = f"{str(t_start):>4}-{str(t_end):>4}"
 
         shap_values_int = explainer(X_test, check_additivity=False)
         shap_values_int = format_SHAP_values(shap_values_int, clf, X_test)
@@ -448,17 +448,44 @@ if __name__ == "__main__":
 
     K = 4  # number of top features to show
 
-    sorted_feature_indices = list(feature_importance.argsort()[:K])
+    sorted_feature_indices = list(feature_importance.argsort()[::-1][:K])
 
     for col_idx in sorted_feature_indices:
         print("Considered column:", X_test.columns[col_idx])
 
         for key, value in interval_shap_values.items():
 
-            shap_feature_use = [
+            shap_feature_over_time = [
                 interval_shap_values[key].values[i, col_idx]
                 for key in interval_shap_values.keys()
             ]
-            print(f"Feature: {X_test.columns[col_idx]}")
-            print(f"TIME INTERVAL: [{key})")
-            print(shap_feature_use)
+
+        labels = [f"Interval [{key}) " for key in interval_shap_values.keys()]
+
+        # Colors: SHAP red if positive, SHAP blue if negative
+        colors = ["#FF0051" if v > 0 else "#008BFB" for v in shap_feature_over_time]
+
+        # Plot horizontal bars
+        plt.barh(labels, shap_feature_over_time, color=colors)
+
+        # Auto adjust limits in case:
+        # plt.xlim(min(values) - 1, max(values) + 1)
+        plt.ylim(-0.5, len(shap_feature_over_time) - 0.5)
+
+        plt.xlabel("SHAP value", fontsize=12)
+        # plt.ylabel("Time Interval", fontsize=12)
+        plt.title(f"Importance of {X_test.columns[col_idx]} over time", fontsize=14)
+
+        for fmt in ["png", "pdf"]:
+            plt.savefig(
+                os.path.join(
+                    figures_main_folder,
+                    "features-over-time",
+                    f"Feature_{X_test.columns[col_idx]}_over_time_idx{i}.{fmt}",
+                ),
+                bbox_inches="tight",
+                dpi=DPI_RES,
+            )
+
+        plt.show()
+        plt.close()
