@@ -26,7 +26,7 @@ from plotting_utils import (
 )
 from utilities import SurvivalModelConverter, predict_hazard_function
 from utilities import auto_rename_fields
-from utilities import format_timedelta, format_SHAP_values
+from utilities import format_SHAP_values
 from utilities import save_placeholder_plot
 
 DPI_RES = 180
@@ -446,7 +446,7 @@ if __name__ == "__main__":
         from paste_combo_image import get_images_from_paths, load_images
 
         image_paths = get_images_from_paths(i, interval_keys, **folders)
-        images = load_images(*image_paths)
+        images = [Image.open(p) for p in image_paths if os.path.exists(p)]
 
         bottom_images = images[2:] if len(images) > 2 else []
         top_images = images[:2] if len(images) >= 2 else images[:1]
@@ -530,28 +530,28 @@ if __name__ == "__main__":
 
         # Step 1: get all image paths needed to build the second combo image, and load them:
 
-        image_paths = get_images_from_paths(i, interval_keys, **global_folders)
-        images = load_images(*image_paths)
+        image_paths_global = get_images_from_paths(i, interval_keys, **global_folders)
+        images_global = [Image.open(p) for p in image_paths_global if os.path.exists(p)]
 
-        top_images = images[:1]
-        bottom_images = images[1:]
+        top_images_global = images_global[:1]
+        bottom_images_global = images_global[1:]
 
         scale_factor = 1.3  # make top row images bigger
-        top_images = [
+        top_images_global = [
             im.resize((int(im.width * scale_factor), int(im.height * scale_factor)))
-            for im in top_images
+            for im in top_images_global
         ]
 
         # Step 2: Calculate layout (size of combo image), position all sub-images
         # accordingly. Treat top row and bottom rows separately
 
         layout = calculate_layout(
-            top_images,
-            bottom_images,
+            top_images_global,
+            bottom_images_global,
             max_admitted_per_row=MAX_ADMITTED_PER_ROW,
         )
         # Now that we know the size, create blank canvas for combo image
-        combo_image = Image.new(
+        combo_image_global = Image.new(
             "RGB",
             (layout["combo_width"], layout["combo_height"]),
             color=(255, 255, 255),
@@ -559,21 +559,23 @@ if __name__ == "__main__":
         # Compute x-positions for top row
         positions = compute_top_row_x_pos(layout["combo_width"], layout["top_widths"])
         # Place top row and bottom row images:
-        place_top_row(combo_image, top_images, positions, layout["y_pad_top"])
-        place_bottom_rows(combo_image, bottom_images, layout)
+        place_top_row(
+            combo_image_global, top_images_global, positions, layout["y_pad_top"]
+        )
+        place_bottom_rows(combo_image_global, bottom_images_global, layout)
 
         # Cleanup
-        for im in images:
+        for im in images_global:
             im.close()
 
         # Step 3: rendering title, final assembly, store and display final combo-image:
-        title_image = render_title(
+        title_image_global = render_title(
             layout["combo_width"], f"Time-SHAP explanation", DPI_RES
         )
 
-        final_image = assemble_final_image(
-            title_image,
-            combo_image,
+        final_image_global = assemble_final_image(
+            title_image_global,
+            combo_image_global,
             layout["combo_width"],
             layout["combo_height"],
             title_padding=20,
@@ -586,6 +588,6 @@ if __name__ == "__main__":
 
         for fmt in ["pdf", "png"]:
             save_combo_file = os.path.join(out_dir, f"{combo_image_name}.{fmt}")
-            final_image.save(save_combo_file, dpi=(DPI_RES, DPI_RES))
+            final_image_global.save(save_combo_file, dpi=(DPI_RES, DPI_RES))
 
-        display_image(final_image)
+        display_image(final_image_global)

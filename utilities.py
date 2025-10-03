@@ -36,38 +36,6 @@ def save_placeholder_plot(plot_path, plot_name, dpi_res):
     plt.close(fig)
 
 
-def compute_x_positions(
-    container_width: int, item_widths: list[int], n_bottom_imgs: int
-) -> list[int]:
-    """
-    For n<3: put items at extremes (maximize middle space).
-    For n>=3: equal gaps (>= min_gap when possible). Positions are ints.
-    """
-    if n_bottom_imgs < 1:
-        raise ValueError("n_bottom_imgs must be at least 1, and we expect >= 2 images.")
-    if n_bottom_imgs == 1:
-        w = item_widths[0]
-        warnings.warn(
-            "Only one image provided for bottom row, making timeSHAP redundant."
-        )
-        return [(container_width - w) // 2]
-    if n_bottom_imgs == 2:
-        _, w1 = item_widths
-        return [20, container_width - w1]
-
-    # else: we want to build equal gaps (three of them, in this case)
-    total_w = sum(item_widths)
-    n_gaps = 3
-    free_hspace = container_width - total_w
-    h_gap = max(0, free_hspace // n_gaps)
-
-    xs, current = [], h_gap
-    for w in item_widths:
-        xs.append(current)
-        current += w + h_gap
-    return xs
-
-
 def rename_fields_dataframe(df):
     rename_map = {}
     for column in df.columns:
