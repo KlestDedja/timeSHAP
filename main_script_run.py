@@ -82,7 +82,7 @@ if __name__ == "__main__":
     y_pred_surv = clf.predict_survival_function(X_test, return_array=True)
     y_pred_surv = pd.DataFrame(y_pred_surv, columns=unique_times)
 
-    IDX_PLOT = 1  # meaningful example is idx = 36 for example data with size = 700, and idx =1 for the full data
+    IDX_PLOT = 1  # pick one index for plotting example
     FONTSIZE = 14
 
     y_survs = clf.predict_survival_function(X_test, return_array=True)
@@ -221,8 +221,8 @@ if __name__ == "__main__":
             plt.pause(0.4)
         plt.close()
 
-    # examples to explain: 3 for draft run, 12 for full data
-    N = 3 if DRAFT_RUN else 8
+    # examples to explain: 3 for draft run, 8 to 12 for full data
+    N = 3 if DRAFT_RUN else 10
 
     for i in range(N):
 
@@ -290,7 +290,6 @@ if __name__ == "__main__":
 
         """ local and global SHAP plot here: computed over entire interval """
         local_plt_name = f"Local_SHAP_idx{i}"
-        # global_plt_name_pdf = f"Global_SHAP_idx{i}.pdf"
 
         # Robust check for SHAP values: any non-finite value raises an exception:
         shap_vals = shap_values[i].values
