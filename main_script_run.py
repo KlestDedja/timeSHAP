@@ -28,7 +28,7 @@ from utilities import format_SHAP_values
 from utilities import save_placeholder_plot
 
 DPI_RES = 180
-DRAFT_RUN = False
+DRAFT_RUN = True
 
 if __name__ == "__main__":
 
@@ -222,7 +222,7 @@ if __name__ == "__main__":
         plt.close()
 
     # examples to explain: 3 for draft run, 8 to 12 for full data
-    N = 3 if DRAFT_RUN else 10
+    N = 2 if DRAFT_RUN else 10
 
     for i in range(N):
 
@@ -426,170 +426,39 @@ if __name__ == "__main__":
 
             # interval loop closed, now let's load images and paste them one next to each other
 
-        ######    INTERVAL SHAP PLOT, with local SHAP plot    ######
-        # load image folders and interval keys
-        interval_keys = list(interval_shap_values.keys())
+    ############ Now diplay contribution over time for top features ##########
 
-        # prepare dict with folder paths for combo image
-        folders = {
-            "survival_curves": survival_figs_folder,
-            "local_shap": local_shap_folder,
-            "local_interval_shap": local_interv_figs_folder,
-        }
+    """
+    - Collect shap_values for overall ranking -> Select top K
+    - Colect shap_values_int for top K features only
+    - Hist plot for each top K feature, along time intervals
+    - Combo plot with S(t), Global SHAP, and new histograms
 
-        MAX_ADMITTED_PER_ROW = 4
+    """
 
-        # Step 1: get all image paths needed to build the first combo image, and load them:
-        from paste_combo_image import get_images_from_paths
+    i = 1  # example index to explain
 
-        image_paths = get_images_from_paths(i, interval_keys, **folders)
-        images = [Image.open(p) for p in image_paths if os.path.exists(p)]
+    for key, value in interval_shap_values.items():
 
-        bottom_images = images[2:] if len(images) > 2 else images[1:]
-        top_images = images[:2] if len(images) >= 2 else images[:1]
+        shap_values_use = interval_shap_values[key][i]
+        print(f"TIME INTERVAL: [{key})")
+        print(shap_values_use.shape)
 
-        scale_factor = 1.3  # make top row images bigger
-        top_images = [
-            im.resize((int(im.width * scale_factor), int(im.height * scale_factor)))
-            for im in top_images
-        ]
+    feature_importance = np.mean(np.abs(shap_values.values), axis=0)
 
-        # Step 2: Calculate layout (size of combo image), position all sub-images
-        # accoridingly, treat top row and bottom rows separately
-        from paste_combo_image import (
-            calculate_layout,
-            compute_top_row_x_pos,
-            place_top_row,
-            place_bottom_rows,
-        )
+    K = 4  # number of top features to show
 
-        layout = calculate_layout(
-            top_images,
-            bottom_images,
-            max_admitted_per_row=MAX_ADMITTED_PER_ROW,
-        )
-        # Now that we know the size, create blank canvas for combo image
-        combo_image = Image.new(
-            "RGB",
-            (layout["combo_width"], layout["combo_height"]),
-            color=(255, 255, 255),
-        )
-        # Compute x-positions for top row
-        positions = compute_top_row_x_pos(layout["combo_width"], layout["top_widths"])
-        # Place top row and bottom row images:
-        place_top_row(combo_image, top_images, positions, layout["y_pad_top"])
-        place_bottom_rows(combo_image, bottom_images, layout)
+    sorted_feature_indices = list(feature_importance.argsort()[:K])
 
-        # Cleanup
-        for im in images:
-            im.close()
+    for col_idx in sorted_feature_indices:
+        print("Considered column:", X_test.columns[col_idx])
 
-        from paste_combo_image import (
-            render_title,
-            assemble_image_title,
-            display_image,
-        )
+        for key, value in interval_shap_values.items():
 
-        # Step 3: rendering title, final assembly, store and display final combo-image:
-        title_image = render_title(
-            layout["combo_width"], f"Time-SHAP explanation", DPI_RES
-        )
-
-        final_image = assemble_image_title(
-            title_image,
-            combo_image,
-            layout["combo_width"],
-            layout["combo_height"],
-            title_padding=20,
-        )
-        # Save final combo image
-        out_dir = os.path.join(figures_main_folder, "combo-plots")
-        os.makedirs(out_dir, exist_ok=True)
-
-        combo_local_name = f"Local-timeSHAP_idx{i}_combined"
-
-        for fmt in ["pdf", "png"]:
-            save_combo_file = os.path.join(out_dir, f"{combo_local_name}.{fmt}")
-            final_image.save(save_combo_file, dpi=(DPI_RES, DPI_RES))
-
-        display_image(final_image)
-
-        #############       GLOBAL INTERVAL SHAP PLOTS        #############
-        # repeat the same procedure as above, but now for global SHAP plots
-        #############                                         #############
-
-        global_folders = {
-            "global_shap": global_shap_folder,
-            "global_interval_shap": global_interv_figs_folder,
-        }
-
-        MAX_ADMITTED_PER_ROW = 3
-
-        # Step 1: get all image paths needed to build the second combo image, and load them:
-
-        image_paths_global = get_images_from_paths(i, interval_keys, **global_folders)
-        images_global = [Image.open(p) for p in image_paths_global if os.path.exists(p)]
-
-        top_images_global = images_global[:1]
-        bottom_images_global = images_global[1:]
-
-        scale_factor = 1.3  # make top row images bigger
-        top_images_global = [
-            im.resize((int(im.width * scale_factor), int(im.height * scale_factor)))
-            for im in top_images_global
-        ]
-
-        # Step 2: Calculate layout (size of combo image), position all sub-images
-        # accordingly. Treat top row and bottom rows separately
-
-        layout = calculate_layout(
-            top_images_global,
-            bottom_images_global,
-            max_admitted_per_row=MAX_ADMITTED_PER_ROW,
-        )
-        # Now that we know the size, create blank canvas for combo image
-        combo_image_global = Image.new(
-            "RGB",
-            (layout["combo_width"], layout["combo_height"]),
-            color=(255, 255, 255),
-        )
-        # Compute x-positions for top row
-        positions = compute_top_row_x_pos(layout["combo_width"], layout["top_widths"])
-        # Place top row and bottom row images:
-        place_top_row(
-            combo_image_global, top_images_global, positions, layout["y_pad_top"]
-        )
-        place_bottom_rows(combo_image_global, bottom_images_global, layout)
-
-        # Cleanup
-        for im in images_global:
-            im.close()
-
-        # Step 3: rendering title, final assembly, store and display final combo-image:
-        # we provide more padding for the title for global combo image
-        title_image_global = render_title(
-            layout["combo_width"],
-            f"Time-SHAP explanation",
-            DPI_RES,
-            font_size=28,
-            title_padding=40,
-        )
-
-        final_image_global = assemble_image_title(
-            title_image_global,
-            combo_image_global,
-            layout["combo_width"],
-            layout["combo_height"],
-            title_padding=20,
-        )
-        # Save final combo image
-        combo_image_name = f"Global-timeSHAP_idx{i}_combined"
-
-        out_dir = os.path.join(figures_main_folder, "combo-plots")
-        os.makedirs(out_dir, exist_ok=True)
-
-        for fmt in ["pdf", "png"]:
-            save_combo_file = os.path.join(out_dir, f"{combo_image_name}.{fmt}")
-            final_image_global.save(save_combo_file, dpi=(DPI_RES, DPI_RES))
-
-        display_image(final_image_global)
+            shap_feature_use = [
+                interval_shap_values[key].values[i, col_idx]
+                for key in interval_shap_values.keys()
+            ]
+            print(f"Feature: {X_test.columns[col_idx]}")
+            print(f"TIME INTERVAL: [{key})")
+            print(shap_feature_use)
