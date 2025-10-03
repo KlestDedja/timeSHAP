@@ -222,7 +222,7 @@ if __name__ == "__main__":
         plt.close()
 
     # examples to explain: 3 for draft run, 8 to 12 for full data
-    N = 2 if DRAFT_RUN else 10
+    N = 3 if DRAFT_RUN else 10
 
     for i in range(N):
 
@@ -426,66 +426,63 @@ if __name__ == "__main__":
 
             # interval loop closed, now let's load images and paste them one next to each other
 
-    ############ Now diplay contribution over time for top features ##########
+        ############ Now diplay contribution over time for top features ##########
 
-    """
-    - Collect shap_values for overall ranking -> Select top K
-    - Colect shap_values_int for top K features only
-    - Hist plot for each top K feature, along time intervals
-    - Combo plot with S(t), Global SHAP, and new histograms
+        """
+        - Collect shap_values for overall ranking -> Select top K
+        - Colect shap_values_int for top K features only
+        - Hist plot for each top K feature, along time intervals
+        - Combo plot with S(t), Global SHAP, and new histograms
 
-    """
+        """
 
-    i = 1  # example index to explain
+        # for key, value in interval_shap_values.items():
+        #     shap_values_use = interval_shap_values[key][i]
 
-    for key, value in interval_shap_values.items():
+        # Want to plot the GLOBALLY most important features over time? Then:
+        global_feature_importance = np.mean(np.abs(shap_values.values), axis=0)
+        # Want to plot the most important features over time of the sample? Then:
+        local_feature_importance = np.mean(np.abs(shap_values.values[i]), axis=0)
 
-        shap_values_use = interval_shap_values[key][i]
-        print(f"TIME INTERVAL: [{key})")
-        print(shap_values_use.shape)
+        K = 4  # number of top features to show
 
-    feature_importance = np.mean(np.abs(shap_values.values), axis=0)
+        sorted_feature_indices = list(local_feature_importance.argsort()[::-1][:K])
 
-    K = 4  # number of top features to show
+        for col_idx in sorted_feature_indices:
+            print("Considered column:", X_test.columns[col_idx])
 
-    sorted_feature_indices = list(feature_importance.argsort()[::-1][:K])
+            for key, value in interval_shap_values.items():
 
-    for col_idx in sorted_feature_indices:
-        print("Considered column:", X_test.columns[col_idx])
+                shap_feature_over_time = [
+                    interval_shap_values[key].values[i, col_idx]
+                    for key in interval_shap_values.keys()
+                ]
 
-        for key, value in interval_shap_values.items():
+            labels = [f"Interval [{key}) " for key in interval_shap_values.keys()]
 
-            shap_feature_over_time = [
-                interval_shap_values[key].values[i, col_idx]
-                for key in interval_shap_values.keys()
-            ]
+            # Colors: SHAP red if positive, SHAP blue if negative
+            colors = ["#FF0051" if v > 0 else "#008BFB" for v in shap_feature_over_time]
 
-        labels = [f"Interval [{key}) " for key in interval_shap_values.keys()]
+            # Plot horizontal bars
+            plt.barh(labels, shap_feature_over_time, color=colors)
 
-        # Colors: SHAP red if positive, SHAP blue if negative
-        colors = ["#FF0051" if v > 0 else "#008BFB" for v in shap_feature_over_time]
+            # Auto adjust limits in case:
+            # plt.xlim(min(values) - 1, max(values) + 1)
+            plt.ylim(-0.5, len(shap_feature_over_time) - 0.5)
 
-        # Plot horizontal bars
-        plt.barh(labels, shap_feature_over_time, color=colors)
+            plt.xlabel("SHAP value", fontsize=12)
+            # plt.ylabel("Time Interval", fontsize=12)
+            plt.title(f"Importance of {X_test.columns[col_idx]} over time", fontsize=14)
 
-        # Auto adjust limits in case:
-        # plt.xlim(min(values) - 1, max(values) + 1)
-        plt.ylim(-0.5, len(shap_feature_over_time) - 0.5)
+            for fmt in ["png", "pdf"]:
+                plt.savefig(
+                    os.path.join(
+                        figures_main_folder,
+                        "features-over-time",
+                        f"Feature_{X_test.columns[col_idx]}_over_time_idx{i}.{fmt}",
+                    ),
+                    bbox_inches="tight",
+                    dpi=DPI_RES,
+                )
 
-        plt.xlabel("SHAP value", fontsize=12)
-        # plt.ylabel("Time Interval", fontsize=12)
-        plt.title(f"Importance of {X_test.columns[col_idx]} over time", fontsize=14)
-
-        for fmt in ["png", "pdf"]:
-            plt.savefig(
-                os.path.join(
-                    figures_main_folder,
-                    "features-over-time",
-                    f"Feature_{X_test.columns[col_idx]}_over_time_idx{i}.{fmt}",
-                ),
-                bbox_inches="tight",
-                dpi=DPI_RES,
-            )
-
-        plt.show()
-        plt.close()
+            plt.close()
