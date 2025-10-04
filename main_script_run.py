@@ -28,7 +28,7 @@ from utilities import format_SHAP_values
 from utilities import save_placeholder_plot
 
 DPI_RES = 180
-DRAFT_RUN = False
+DRAFT_RUN = True
 
 if __name__ == "__main__":
 
@@ -64,6 +64,7 @@ if __name__ == "__main__":
     survival_figs_folder = os.path.join(figures_main_folder, "survival-curves")
     local_shap_folder = os.path.join(figures_main_folder, "local-SHAP")
     global_shap_folder = os.path.join(figures_main_folder, "global-SHAP")
+    feature_interval_folder = os.path.join(figures_main_folder, "features-over-time")
 
     clf = RandomSurvivalForest(
         n_estimators=100, min_samples_split=10, n_jobs=5, random_state=0
@@ -199,7 +200,7 @@ if __name__ == "__main__":
             feature_perturbation="tree_path_dependent",
         )
 
-        interval_str = f"{str(t_start)}-{str(t_end)}"
+        interval_str = f"{str(t_start):>4}-{str(t_end):>4}"
 
         shap_values_int = explainer(X_test, check_additivity=False)
         shap_values_int = format_SHAP_values(shap_values_int, clf, X_test)
@@ -426,7 +427,7 @@ if __name__ == "__main__":
 
             # interval loop closed, now let's load images and paste them one next to each other
 
-        ######    INTERVAL SHAP PLOT, with local SHAP plot    ######
+        ######    local SHAP plot with INTERVALS    ######
         # load image folders and interval keys
         interval_keys = list(interval_shap_values.keys())
 
@@ -437,21 +438,25 @@ if __name__ == "__main__":
             "local_interval_shap": local_interv_figs_folder,
         }
 
-        MAX_ADMITTED_PER_ROW = 4
+        MAX_ADMITTED_PER_ROW_LOCAL = 4
 
         # Step 1: get all image paths needed to build the first combo image, and load them:
         from paste_combo_image import get_images_from_paths
 
         image_paths = get_images_from_paths(i, interval_keys, **folders)
-        images = [Image.open(p) for p in image_paths if os.path.exists(p)]
+        images_local = [Image.open(p) for p in image_paths if os.path.exists(p)]
 
-        bottom_images = images[2:] if len(images) > 2 else images[1:]
-        top_images = images[:2] if len(images) >= 2 else images[:1]
+        bottom_images_local = (
+            images_local[2:] if len(images_local) > 2 else images_local[1:]
+        )
+        top_images_local = (
+            images_local[:2] if len(images_local) >= 2 else images_local[:1]
+        )
 
         scale_factor = 1.3  # make top row images bigger
-        top_images = [
+        top_images_local = [
             im.resize((int(im.width * scale_factor), int(im.height * scale_factor)))
-            for im in top_images
+            for im in top_images_local
         ]
 
         # Step 2: Calculate layout (size of combo image), position all sub-images
@@ -463,25 +468,32 @@ if __name__ == "__main__":
             place_bottom_rows,
         )
 
-        layout = calculate_layout(
-            top_images,
-            bottom_images,
-            max_admitted_per_row=MAX_ADMITTED_PER_ROW,
+        layout_local = calculate_layout(
+            top_images_local,
+            bottom_images_local,
+            max_admitted_per_row=MAX_ADMITTED_PER_ROW_LOCAL,
         )
         # Now that we know the size, create blank canvas for combo image
-        combo_image = Image.new(
+        combo_image_local = Image.new(
             "RGB",
-            (layout["combo_width"], layout["combo_height"]),
+            (layout_local["combo_width"], layout_local["combo_height"]),
             color=(255, 255, 255),
         )
         # Compute x-positions for top row
-        positions = compute_top_row_x_pos(layout["combo_width"], layout["top_widths"])
+        positions_local = compute_top_row_x_pos(
+            layout_local["combo_width"], layout_local["top_widths"]
+        )
         # Place top row and bottom row images:
-        place_top_row(combo_image, top_images, positions, layout["y_pad_top"])
-        place_bottom_rows(combo_image, bottom_images, layout)
+        place_top_row(
+            combo_image_local,
+            top_images_local,
+            positions_local,
+            layout_local["y_pad_top"],
+        )
+        place_bottom_rows(combo_image_local, bottom_images_local, layout_local)
 
         # Cleanup
-        for im in images:
+        for im in images_local:
             im.close()
 
         from paste_combo_image import (
@@ -491,15 +503,15 @@ if __name__ == "__main__":
         )
 
         # Step 3: rendering title, final assembly, store and display final combo-image:
-        title_image = render_title(
-            layout["combo_width"], f"Time-SHAP explanation", DPI_RES
+        title_image_local = render_title(
+            layout_local["combo_width"], f"Time-SHAP explanation", DPI_RES
         )
 
         final_image = assemble_image_title(
-            title_image,
-            combo_image,
-            layout["combo_width"],
-            layout["combo_height"],
+            title_image_local,
+            combo_image_local,
+            layout_local["combo_width"],
+            layout_local["combo_height"],
             title_padding=20,
         )
         # Save final combo image
@@ -523,7 +535,7 @@ if __name__ == "__main__":
             "global_interval_shap": global_interv_figs_folder,
         }
 
-        MAX_ADMITTED_PER_ROW = 3
+        MAX_ADMITTED_PER_ROW_GLOBAL = 3
 
         # Step 1: get all image paths needed to build the second combo image, and load them:
 
@@ -542,24 +554,29 @@ if __name__ == "__main__":
         # Step 2: Calculate layout (size of combo image), position all sub-images
         # accordingly. Treat top row and bottom rows separately
 
-        layout = calculate_layout(
+        layout_global = calculate_layout(
             top_images_global,
             bottom_images_global,
-            max_admitted_per_row=MAX_ADMITTED_PER_ROW,
+            max_admitted_per_row=MAX_ADMITTED_PER_ROW_GLOBAL,
         )
         # Now that we know the size, create blank canvas for combo image
         combo_image_global = Image.new(
             "RGB",
-            (layout["combo_width"], layout["combo_height"]),
+            (layout_global["combo_width"], layout_global["combo_height"]),
             color=(255, 255, 255),
         )
         # Compute x-positions for top row
-        positions = compute_top_row_x_pos(layout["combo_width"], layout["top_widths"])
+        positions_global = compute_top_row_x_pos(
+            layout_global["combo_width"], layout_global["top_widths"]
+        )
         # Place top row and bottom row images:
         place_top_row(
-            combo_image_global, top_images_global, positions, layout["y_pad_top"]
+            combo_image_global,
+            top_images_global,
+            positions_global,
+            layout_global["y_pad_top"],
         )
-        place_bottom_rows(combo_image_global, bottom_images_global, layout)
+        place_bottom_rows(combo_image_global, bottom_images_global, layout_global)
 
         # Cleanup
         for im in images_global:
@@ -568,7 +585,7 @@ if __name__ == "__main__":
         # Step 3: rendering title, final assembly, store and display final combo-image:
         # we provide more padding for the title for global combo image
         title_image_global = render_title(
-            layout["combo_width"],
+            layout_global["combo_width"],
             f"Time-SHAP explanation",
             DPI_RES,
             font_size=28,
@@ -578,18 +595,172 @@ if __name__ == "__main__":
         final_image_global = assemble_image_title(
             title_image_global,
             combo_image_global,
-            layout["combo_width"],
-            layout["combo_height"],
+            layout_global["combo_width"],
+            layout_global["combo_height"],
             title_padding=20,
         )
         # Save final combo image
-        combo_image_name = f"Global-timeSHAP_idx{i}_combined"
+        combo_image_global_name = f"Global-timeSHAP_idx{i}_combined"
 
         out_dir = os.path.join(figures_main_folder, "combo-plots")
         os.makedirs(out_dir, exist_ok=True)
 
         for fmt in ["pdf", "png"]:
-            save_combo_file = os.path.join(out_dir, f"{combo_image_name}.{fmt}")
+            save_combo_file = os.path.join(out_dir, f"{combo_image_global_name}.{fmt}")
             final_image_global.save(save_combo_file, dpi=(DPI_RES, DPI_RES))
 
         display_image(final_image_global)
+
+        ############ Now contributions over time for top features ##########
+
+        for key, value in interval_shap_values.items():
+
+            shap_values_use = interval_shap_values[key][i]
+            print(f"TIME INTERVAL: [{key})")
+            print(shap_values_use.shape)
+
+        feature_importance = np.mean(np.abs(shap_values.values), axis=0)
+
+        n_top_features = 6  # number of top features to show
+
+        sorted_feature_indices = list(
+            feature_importance.argsort()[::-1][:n_top_features]
+        )
+
+        for col_idx in sorted_feature_indices:
+            print("Considered column:", X_test.columns[col_idx])
+
+            for key, value in interval_shap_values.items():
+
+                shap_feature_over_time = [
+                    interval_shap_values[key].values[i, col_idx]
+                    for key in interval_shap_values.keys()
+                ]
+
+            labels = [f"Interval [{key}) " for key in interval_shap_values.keys()]
+
+            # Colors: SHAP red if positive, SHAP blue if negative
+            colors = ["#FF0051" if v > 0 else "#008BFB" for v in shap_feature_over_time]
+
+            # Plot horizontal bars
+            plt.barh(labels, shap_feature_over_time, color=colors)
+
+            # Auto adjust limits in case:
+            # plt.xlim(min(values) - 1, max(values) + 1)
+            plt.ylim(-0.5, len(shap_feature_over_time) - 0.5)
+            plt.xlabel("SHAP value", fontsize=12)
+            plt.title(f"Importance of {X_test.columns[col_idx]} over time", fontsize=14)
+
+            for fmt in ["png", "pdf"]:
+                plt.savefig(
+                    os.path.join(
+                        figures_main_folder,
+                        "features-over-time",
+                        f"Feature_{X_test.columns[col_idx]}_over_time_idx{i}.{fmt}",
+                    ),
+                    bbox_inches="tight",
+                    dpi=DPI_RES,
+                )
+
+            plt.close()
+
+        """
+        - Combo plot with survival curve, Global SHAP, and histograms with (feature importance over time
+        """
+
+        ######    INTERVAL FEATURE IMPORTANCE PLOT    ######
+        # load image folders and interval keys
+        interval_keys = list(interval_shap_values.keys())
+
+        # prepare dict with folder paths for combo image
+        feature_interval_folders = {
+            "survival_curves": survival_figs_folder,
+            "global_shap": global_shap_folder,
+            "interval_features_shap": feature_interval_folder,
+        }
+
+        MAX_ADMITTED_PER_ROW_FEATURE = 3
+
+        # Step 1 (for the 3rd time): get all image paths needed to build the first combo image, and load them:
+
+        feature_image_paths = get_images_from_paths(
+            i, interval_keys, **feature_interval_folders
+        )
+        images_feature = [
+            Image.open(p) for p in feature_image_paths if os.path.exists(p)
+        ]
+
+        bottom_images_feature = (
+            images_feature[2:] if len(images_feature) > 2 else images_feature[1:]
+        )
+
+        assert n_top_features == len(bottom_images_feature)
+
+        top_images_feature = (
+            images_feature[:2] if len(images_feature) >= 2 else images_feature[:1]
+        )
+
+        scale_factor = 1.3  # make top row images bigger
+        top_images_feature = [
+            im.resize((int(im.width * scale_factor), int(im.height * scale_factor)))
+            for im in top_images_feature
+        ]
+
+        # Step 2 (for the 3rd time): Calculate layout (size of combo image), position all sub-images
+        # accoridingly, treat top row and bottom rows separately
+
+        layout_feature = calculate_layout(
+            top_images_feature,
+            bottom_images_feature,
+            max_admitted_per_row=MAX_ADMITTED_PER_ROW_FEATURE,
+            x_pad_intrarow=150,
+        )
+        # Now that we know the size, create blank canvas for combo image
+        combo_image_feats = Image.new(
+            "RGB",
+            (layout_feature["combo_width"], layout_feature["combo_height"]),
+            color=(255, 255, 255),
+        )
+        # Compute x-positions for top row
+        positions = compute_top_row_x_pos(
+            layout_feature["combo_width"], layout_feature["top_widths"]
+        )
+        # Place top row and bottom row images:
+        place_top_row(
+            combo_image_feats,
+            top_images_feature,
+            positions,
+            layout_feature["y_pad_top"],
+        )
+        place_bottom_rows(combo_image_feats, bottom_images_feature, layout_feature)
+
+        # Cleanup
+        for im in images_feature:
+            im.close()
+
+        # Step 3: rendering title, final assembly, store and display final combo-image:
+        title_image_feature = render_title(
+            layout_feature["combo_width"],
+            f"Time-SHAP, feature importance over time",
+            DPI_RES,
+            font_size=28,
+        )
+
+        final_image_feature = assemble_image_title(
+            title_image_feature,
+            combo_image_feats,
+            layout_feature["combo_width"],
+            layout_feature["combo_height"],
+            title_padding=20,
+        )
+        # Save final combo image
+        out_dir = os.path.join(figures_main_folder, "combo-plots")
+        os.makedirs(out_dir, exist_ok=True)
+
+        combo_features_name = f"TimeSHAP_idx{i}_features-over_time"
+
+        for fmt in ["pdf", "png"]:
+            save_combo_file = os.path.join(out_dir, f"{combo_features_name}.{fmt}")
+            final_image_feature.save(save_combo_file, dpi=(DPI_RES, DPI_RES))
+
+        display_image(final_image_feature)

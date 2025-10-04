@@ -82,6 +82,29 @@ def get_images_from_paths(idx, key_list, **folders):
         else:
             print("No global SHAP interval images found")
 
+    if "interval_features_shap" in folders:
+        # interval features: search for all files matching Feature_*_over_time_idx{idx}.png
+        import re
+
+        feature_folder = folders["interval_features_shap"]
+        try:
+            all_files = os.listdir(feature_folder)
+        except Exception as e:
+            print(f"Could not list files in {feature_folder}: {e}")
+            all_files = []
+        pattern = re.compile(rf"Feature_.+_over_time_idx{idx}\.png$")
+        #                ^ .+ : match any char except for newline, at least once (+)
+        found_interval_features = [
+            os.path.join(feature_folder, fname)
+            for fname in all_files
+            if pattern.match(fname)
+        ]
+        if found_interval_features:
+            list_of_file_paths.extend(found_interval_features)
+            print("Adding interval features SHAP images")
+        else:
+            print("No interval features SHAP images found")
+
     return list_of_file_paths
 
 
@@ -108,18 +131,17 @@ def calculate_layout(
     if n_interval_imgs == 0:
         n_interval_rows = 0
         max_imgs_per_row = 0
+        bottom_required_width = 0
+        bottom_row_heights = 0
     else:
         n_interval_rows = (n_interval_imgs - 1) // MAX_ADMITTED_PER_ROW + 1
         max_imgs_per_row = int(np.ceil(n_interval_imgs / n_interval_rows))
-    if n_interval_imgs > 0:
         avg_width = int(np.mean(bottom_widths))
         bottom_required_width = avg_width * max_imgs_per_row + x_pad_intrarow * max(
             0, max_imgs_per_row - 1
         )
         bottom_row_heights = max(bottom_heights)
-    else:
-        bottom_required_width = 0
-        bottom_row_heights = 0
+
     combo_width = max(top_required_width, bottom_required_width)
     combo_height = (
         y_pad_top
@@ -143,7 +165,7 @@ def calculate_layout(
     }
 
 
-def compute_top_row_x_pos(combo_width, img_widths, edge_padding=10):
+def compute_top_row_x_pos(combo_width, img_widths):
     """
     Compute horizontal positions for placing images in the top row:
     - If only one image, center it.
@@ -164,8 +186,9 @@ def compute_top_row_x_pos(combo_width, img_widths, edge_padding=10):
 
     # General case: n_img > 1. spread images evenly
     total_img_width = sum(img_widths)
-    gaps = n_imgs + 1  # gap between images, with some gap from the edges
-    gap_size = max(edge_padding, (combo_width - total_img_width) // gaps)
+    gaps = n_imgs + 1  # gap between images, space on edges as well
+    # the remaining horizontal gap is to be distributed equally between the gaps
+    gap_size = (combo_width - total_img_width) // gaps
 
     positions = []
     current_x = gap_size
@@ -188,7 +211,6 @@ def place_top_row(canvas, top_images, positions, y_pad_top):
 
 def place_bottom_rows(canvas, bottom_images, layout):
     x_offset = 0
-    # place bottom rows below existing top row, leave vertical space and additional padding
     y_offset = (
         max(layout["top_heights"])
         + layout["y_pad_top"]
@@ -198,32 +220,26 @@ def place_bottom_rows(canvas, bottom_images, layout):
         row_number = (
             idx // layout["max_imgs_per_row"] if layout["max_imgs_per_row"] else 0
         )
-        # once the (bottom) row number is identified (indexing from 0),
-        # start placing the bottom images row by row
+        # Start a new row
         if layout["max_imgs_per_row"] and idx % layout["max_imgs_per_row"] == 0:
             x_offset = 0
-            row_width_sum = sum(
-                layout["bottom_widths"][idx : idx + layout["max_imgs_per_row"]]
-            )
-            n_row_items = len(
-                layout["bottom_widths"][idx : idx + layout["max_imgs_per_row"]]
-            )
-            extra_intrarow_gap = (
-                (layout["combo_width"] - row_width_sum) // (n_row_items + 1)
-                if n_row_items > 0
+            row_start = idx
+            row_end = min(idx + layout["max_imgs_per_row"], len(bottom_images))
+            row_width_sum = sum(layout["bottom_widths"][row_start:row_end])
+            n_row_items = row_end - row_start
+            gap = (
+                (layout["combo_width"] - row_width_sum) // (n_row_items - 1)
+                if n_row_items > 1
                 else 0
             )
-        x_curr_offset = x_offset + (
-            extra_intrarow_gap if layout["max_imgs_per_row"] else 0
-        )
+        x_curr_offset = x_offset
         y_curr_offset = y_offset + row_number * (
             max(layout["bottom_heights"]) + layout["y_pad_intrarow"]
         )
         canvas.paste(img, (x_curr_offset, y_curr_offset))
         x_offset += img.size[0]
-        x_offset += layout["x_pad_intrarow"]
-        if layout["max_imgs_per_row"]:
-            x_offset += extra_intrarow_gap
+        if layout["max_imgs_per_row"] and (idx + 1) % layout["max_imgs_per_row"] != 0:
+            x_offset += gap
 
 
 def render_title(combo_width, title, image_dpi_res, font_size=36, title_padding=20):
