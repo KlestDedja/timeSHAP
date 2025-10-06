@@ -28,7 +28,7 @@ from utilities import format_SHAP_values
 from utilities import save_placeholder_plot
 
 DPI_RES = 180
-DRAFT_RUN = True
+DRAFT_RUN = False
 
 if __name__ == "__main__":
 
@@ -611,6 +611,18 @@ if __name__ == "__main__":
         # we are still looping over instances (i)
         ######################                        ######################
 
+        # WARNING: different filename (feature names) might be generated in each run, this can lead
+        # to errors further down the pipeline. For this reason, at the beginning of an iteration
+        #  across samples, we clean-up the feature-over-time folder before generating new plots:
+        if i == 0:  # only once, at the beginning of the first instance
+            # Delete all pdf and png files:
+            for filename in os.listdir(feature_interval_folder):
+                file_path = os.path.join(feature_interval_folder, filename)
+                if os.path.isfile(file_path) and filename.lower().endswith(
+                    (".pdf", ".png")
+                ):
+                    os.remove(file_path)
+
         for key, value in interval_shap_values.items():
             shap_values_use = interval_shap_values[key][i]
 
@@ -743,7 +755,6 @@ if __name__ == "__main__":
             for im in bottom_images_feature:
                 if feat_name in im.filename:
                     bottom_images_ordered.append(im)
-                    break
 
         layout_feature = calculate_layout(
             top_images_feature,
