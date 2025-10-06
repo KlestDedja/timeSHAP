@@ -84,7 +84,6 @@ if __name__ == "__main__":
     y_pred_surv = pd.DataFrame(y_pred_surv, columns=unique_times)
 
     IDX_PLOT = 1  # pick one index for plotting example
-    FONTSIZE = 14
 
     y_survs = clf.predict_survival_function(X_test, return_array=True)
     y_surv = clf.predict_survival_function(X_test)[IDX_PLOT].y
@@ -101,21 +100,21 @@ if __name__ == "__main__":
     y_hazard_smooth = rolling_kernel(y_hazard, kernel_size=KERNEL_SIZE)
     dy_hazard_smooth = rolling_kernel(dy_hazard, kernel_size=KERNEL_SIZE)
 
-    plt = plot_survival_curve(unique_times, y_surv_smooth, fontsize=FONTSIZE)
+    plt = plot_survival_curve(unique_times, y_surv_smooth, fontsize=14)
     plt.savefig(os.path.join(root_folder, fig_folder, "survival-curve-example.pdf"))
     if DRAFT_RUN:
         plt.show(block=False)
         plt.pause(0.4)
     plt.close()
 
-    plt = plot_cum_hazard_curve(unique_times, y_hazard_smooth, fontsize=FONTSIZE)
+    plt = plot_cum_hazard_curve(unique_times, y_hazard_smooth, fontsize=14)
     plt.savefig(os.path.join(root_folder, fig_folder, "cum-hazard-curve-example.pdf"))
     if DRAFT_RUN:
         plt.show(block=False)
         plt.pause(0.4)
     plt.close()
 
-    plt = plot_hazard_curve(unique_times, dy_hazard_smooth, fontsize=FONTSIZE)
+    plt = plot_hazard_curve(unique_times, dy_hazard_smooth, fontsize=14)
     plt.savefig(os.path.join(root_folder, fig_folder, "hazard-curve-example.pdf"))
     if DRAFT_RUN:
         plt.show(block=False)
@@ -145,6 +144,7 @@ if __name__ == "__main__":
     shap_values = explainer(X_test, check_additivity=True)
     shap_values = format_SHAP_values(shap_values, clf, X_test)
 
+    plt.figure(figsize=(5, 5))
     shap.summary_plot(shap_values, max_display=10, alpha=0.7, show=False)
     plt.title("Global explanation, full interval", fontsize=16)
     plt.xlabel("SHAP value: impact on output", fontsize=14)
@@ -394,7 +394,6 @@ if __name__ == "__main__":
                         dpi=DPI_RES,
                     )
 
-                print(f"Saving figure with size: {fig.get_size_inches()} inches")
                 plt.close(fig)
             else:  # No NaN values found, saving png file only (no PDF file)
                 fig, ax = plt.subplots(figsize=(5, 7))
@@ -404,7 +403,6 @@ if __name__ == "__main__":
                     f"Output explanation, interval [{key})   ",
                     fontsize=round(7 * (DPI_RES / 72)),
                 )
-                print(f"Saving figure with size: {fig.get_size_inches()} inches")
                 fig.savefig(
                     os.path.join(
                         local_interv_figs_folder, f"{local_interv_plt_name}.png"
@@ -414,16 +412,12 @@ if __name__ == "__main__":
                 )
                 plt.close(fig)
 
-            print(f"TIME INTERVAL: [{key})")
-            print(
-                f"Sample prediction, SHAP based: {shap_values_use.base_values + shap_values_use.values.sum():.4f}"
-            )
-            print(
-                f"Population prediction, test data, SHAP based: {shap_values_use.base_values:.4f}"
-            )
-            print(
-                f"Population prediction, train data, 1-S({t_end:.1f}): {1-y_pred_pop.iloc[index_t_end]:.4f}"
-            )
+            # print(
+            #     f"Sample prediction, SHAP based: {shap_values_use.base_values + shap_values_use.values.sum():.4f}"
+            # )
+            # print(
+            #     f"Population prediction, test data, SHAP based: {shap_values_use.base_values:.4f}"
+            # )
 
             # interval loop closed, now let's load images and paste them one next to each other
 
@@ -443,7 +437,7 @@ if __name__ == "__main__":
         # Step 1: get all image paths needed to build the first combo image, and load them:
         from paste_combo_image import get_images_from_paths
 
-        image_paths = get_images_from_paths(i, interval_keys, **folders)
+        image_paths = get_images_from_paths(i, interval_keys, verbose=0, **folders)
         images_local = [Image.open(p) for p in image_paths if os.path.exists(p)]
 
         bottom_images_local = (
@@ -539,7 +533,9 @@ if __name__ == "__main__":
 
         # Step 1: get all image paths needed to build the second combo image, and load them:
 
-        image_paths_global = get_images_from_paths(i, interval_keys, **global_folders)
+        image_paths_global = get_images_from_paths(
+            i, interval_keys, verbose=0, **global_folders
+        )
         images_global = [Image.open(p) for p in image_paths_global if os.path.exists(p)]
 
         top_images_global = images_global[:1]
@@ -612,14 +608,16 @@ if __name__ == "__main__":
         display_image(final_image_global)
 
         ############ Now contributions over time for top features ##########
+        # we are still looping over instances (i)
+        ######################                        ######################
 
         for key, value in interval_shap_values.items():
-
             shap_values_use = interval_shap_values[key][i]
-            print(f"TIME INTERVAL: [{key})")
-            print(shap_values_use.shape)
 
-        feature_importance = np.mean(np.abs(shap_values.values), axis=0)
+        feature_importance = np.abs(shap_values[i].values)
+        # sample importance
+        # OR: alternative global importance:
+        # feature_importance = np.mean(np.abs(shap_values.values), axis=0)
 
         n_top_features = 6  # number of top features to show
 
@@ -627,8 +625,16 @@ if __name__ == "__main__":
             feature_importance.argsort()[::-1][:n_top_features]
         )
 
+        sorted_feature_importance_names = X_test.columns[
+            sorted_feature_indices
+        ].to_list()
+
         for col_idx in sorted_feature_indices:
-            print("Considered column:", X_test.columns[col_idx])
+            # position = 1
+            # print(
+            #     f"Analysing feature {X_test.columns[col_idx]} over time, position {position}"
+            # )
+            # position += 1
 
             for key, value in interval_shap_values.items():
 
@@ -636,20 +642,29 @@ if __name__ == "__main__":
                     interval_shap_values[key].values[i, col_idx]
                     for key in interval_shap_values.keys()
                 ]
-
+            # shap_feature_over_time is now populated with most important (local) features
+            # iterate through them to generate the plots
             labels = [f"Interval [{key}) " for key in interval_shap_values.keys()]
 
             # Colors: SHAP red if positive, SHAP blue if negative
             colors = ["#FF0051" if v > 0 else "#008BFB" for v in shap_feature_over_time]
 
+            feature_value = interval_shap_values[key].data[i, col_idx]
+
+            assert (
+                feature_value == X_test.iloc[i, col_idx]
+            )  # if not, column names have been shuffled by accident
+
             # Plot horizontal bars
             plt.barh(labels, shap_feature_over_time, color=colors)
+            plt.yticks(fontsize=16)
+            plt.gca().invert_yaxis()  # time intervals go from top to bottom
 
-            # Auto adjust limits in case:
-            # plt.xlim(min(values) - 1, max(values) + 1)
-            plt.ylim(-0.5, len(shap_feature_over_time) - 0.5)
             plt.xlabel("SHAP value", fontsize=12)
-            plt.title(f"Importance of {X_test.columns[col_idx]} over time", fontsize=14)
+            plt.title(
+                f"Effect of {X_test.columns[col_idx]}={feature_value:.4g} over time",
+                fontsize=16,
+            )
 
             for fmt in ["png", "pdf"]:
                 plt.savefig(
@@ -675,7 +690,8 @@ if __name__ == "__main__":
         # prepare dict with folder paths for combo image
         feature_interval_folders = {
             "survival_curves": survival_figs_folder,
-            "global_shap": global_shap_folder,
+            # "global_shap": global_shap_folder,
+            "local_shap": local_shap_folder,
             "interval_features_shap": feature_interval_folder,
         }
 
@@ -684,7 +700,7 @@ if __name__ == "__main__":
         # Step 1 (for the 3rd time): get all image paths needed to build the first combo image, and load them:
 
         feature_image_paths = get_images_from_paths(
-            i, interval_keys, **feature_interval_folders
+            i, interval_keys, verbose=0, **feature_interval_folders
         )
         images_feature = [
             Image.open(p) for p in feature_image_paths if os.path.exists(p)
@@ -700,18 +716,38 @@ if __name__ == "__main__":
             images_feature[:2] if len(images_feature) >= 2 else images_feature[:1]
         )
 
-        scale_factor = 1.3  # make top row images bigger
+        scale_factor = 1.3  # make top row images 30% bigger
         top_images_feature = [
             im.resize((int(im.width * scale_factor), int(im.height * scale_factor)))
             for im in top_images_feature
         ]
 
+        if len(images_feature) >= 2:
+            adjust_ratio = 1.18  # Otherwise top right plot looks too small
+
+        top_images_feature[1] = top_images_feature[1].resize(
+            (
+                int(top_images_feature[1].width * adjust_ratio),
+                int(top_images_feature[1].height * adjust_ratio),
+            )
+        )
+
         # Step 2 (for the 3rd time): Calculate layout (size of combo image), position all sub-images
         # accoridingly, treat top row and bottom rows separately
 
+        # ORDER bottom images according to feature importance:
+
+        bottom_images_ordered = []
+
+        for feat_name in sorted_feature_importance_names:
+            for im in bottom_images_feature:
+                if feat_name in im.filename:
+                    bottom_images_ordered.append(im)
+                    break
+
         layout_feature = calculate_layout(
             top_images_feature,
-            bottom_images_feature,
+            bottom_images_ordered,
             max_admitted_per_row=MAX_ADMITTED_PER_ROW_FEATURE,
             x_pad_intrarow=150,
         )
@@ -732,7 +768,7 @@ if __name__ == "__main__":
             positions,
             layout_feature["y_pad_top"],
         )
-        place_bottom_rows(combo_image_feats, bottom_images_feature, layout_feature)
+        place_bottom_rows(combo_image_feats, bottom_images_ordered, layout_feature)
 
         # Cleanup
         for im in images_feature:

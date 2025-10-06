@@ -3,7 +3,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 
-def get_images_from_paths(idx, key_list, **folders):
+def get_images_from_paths(idx, key_list, verbose=0, **folders):
     """
     Collects image file paths for survival curves and SHAP plots.
     ----------
@@ -27,9 +27,9 @@ def get_images_from_paths(idx, key_list, **folders):
         )
         if os.path.exists(surv_path):
             list_of_file_paths.append(surv_path)
-            print("Adding survival curve image")
+            print("Adding survival curve image") if verbose > 0 else None
         else:
-            print("Survival curve image not found")
+            print("Survival curve image not found") if verbose > 0 else None
 
     # local SHAP
     if "local_shap" in folders:
@@ -38,18 +38,18 @@ def get_images_from_paths(idx, key_list, **folders):
         )
         if os.path.exists(local_shap_path):
             list_of_file_paths.append(local_shap_path)
-            print("Adding local SHAP image")
+            print("Adding local SHAP image") if verbose > 0 else None
         else:
-            print("Local SHAP image not found")
+            print("Local SHAP image not found") if verbose > 0 else None
 
     # global SHAP
     if "global_shap" in folders:
         global_shap_path = os.path.join(folders["global_shap"], f"Global_SHAP.png")
         if os.path.exists(global_shap_path):
             list_of_file_paths.append(global_shap_path)
-            print("Adding global SHAP image")
+            print("Adding global SHAP image") if verbose > 0 else None
         else:
-            print("Global SHAP image not found")
+            print("Global SHAP image not found") if verbose > 0 else None
 
     # interval SHAP (local + global)
     if "local_interval_shap" in folders:
@@ -63,9 +63,9 @@ def get_images_from_paths(idx, key_list, **folders):
         found_local = [p for p in local_shap_interval_paths if os.path.exists(p)]
         if found_local:
             list_of_file_paths.extend(found_local)
-            print("Adding local SHAP interval images")
+            print("Adding local SHAP interval images") if verbose > 0 else None
         else:
-            print("No local SHAP interval images found")
+            print("No local SHAP interval images found") if verbose > 0 else None
 
     if "global_interval_shap" in folders:
         # global interval
@@ -101,9 +101,9 @@ def get_images_from_paths(idx, key_list, **folders):
         ]
         if found_interval_features:
             list_of_file_paths.extend(found_interval_features)
-            print("Adding interval features SHAP images")
+            print("Adding interval features SHAP images") if verbose > 0 else None
         else:
-            print("No interval features SHAP images found")
+            print("No interval features SHAP images found") if verbose > 0 else None
 
     return list_of_file_paths
 
